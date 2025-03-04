@@ -16,11 +16,11 @@
       <description></description>
     </item>
     <item>
-      <title>Hello World!</title>
+      <title></title>
       <link>https://gelosecurity.github.io/about/</link>
       <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
       <guid>https://gelosecurity.github.io/about/</guid>
-      <description>&lt;h1 id=&#34;about&#34;&gt;About&lt;/h1&gt;&#xA;&lt;p&gt;My name is Angelo Alviar, and I have around 5 years of experience in red teaming, penetration testing, and application security. I love learning about mobileapplication security.&lt;/p&gt;</description>
+      <description>&lt;h1 id=&#34;about&#34;&gt;About&lt;/h1&gt;&#xA;&lt;p&gt;My name is Angelo Alviar, and I have around 5 years of experience in red teaming, penetration testing, and application security. I love learning about mobile application security.&lt;/p&gt;</description>
     </item>
   </channel>
 </rss>
