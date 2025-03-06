@@ -98,6 +98,8 @@ Dirty Stream: Exploiting Android&#39;s File Sharing - Part 1 | gelosecurity
 <li><strong>Denial of Service:</strong> Corrupting critical files, which may cause application crashes or unexpected behavior.</li>
 </ul>
 <p>The vulnerability arises from the way the target app requests and uses filenames from the attacking app&rsquo;s <code>ContentProvider</code> without proper sanitization, allowing for dangerous path traversal.</p>
+<h3 id="a-quick-look-at-the-vulnerable-code">A Quick Look at the Vulnerable Code</h3>
+<p>&lt;Placeholder with code examples&gt;</p>
 <h3 id="the-starting-point-a-defanged-poc">The Starting Point: A Defanged PoC</h3>
 <p>I began by exploring existing PoC code available on GitHub:</p>
 <ul>
@@ -403,12 +405,7 @@ This class extends <code>ContentProvider</code>. The key method, <code>openFile<
 <p>&lt;GIF PLACEHOLDER&gt;</p>
 <h3 id="step-5-conclusion-and-next-steps">Step 5: Conclusion and Next Steps</h3>
 <p>This post has detailed a small journey from exploring a defanged PoC to refining it into a working exploit. The objective is not only to understand the vulnerability but also to inform developers and security professionals on how to better safeguard their applications.</p>
-<p>In future posts, we will:</p>
-<ol>
-<li><strong>Target More Sensitive Files:</strong> Explore methods to overwrite shared libraries or configuration files.</li>
-<li><strong>Achieve Code Execution:</strong> Delve into how overwriting an <code>.so</code> file can be leveraged for arbitrary code execution.</li>
-<li><strong>Broader Security Implications:</strong> Discuss additional mitigation strategies and best practices for securing Android applications.</li>
-</ol>
+<p>In future posts, we will target more sensitive files and achieve code execution!</p>
 <p>Stay tuned!</p>
 
     </div>
