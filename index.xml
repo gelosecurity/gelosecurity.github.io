@@ -6,8 +6,15 @@
     <description>Recent content on gelosecurity</description>
     <generator>Hugo</generator>
     <language>en-us</language>
-    <lastBuildDate>Mon, 01 Jan 0001 00:00:00 +0000</lastBuildDate>
+    <lastBuildDate>Wed, 05 Mar 2025 00:00:00 +0000</lastBuildDate>
     <atom:link href="https://gelosecurity.github.io/index.xml" rel="self" type="application/rss+xml" />
+    <item>
+      <title>Dirty Stream: Exploiting Android&#39;s File Sharing - Part 1</title>
+      <link>https://gelosecurity.github.io/posts/dirty-stream-pt1/</link>
+      <pubDate>Wed, 05 Mar 2025 00:00:00 +0000</pubDate>
+      <guid>https://gelosecurity.github.io/posts/dirty-stream-pt1/</guid>
+      <description>An in-depth exploration of exploiting a path traversal vulnerability in Android using the &amp;lsquo;Dirty Stream&amp;rsquo; technique. This post covers initial exploration, refining a defanged PoC, and achieving a successful file write.</description>
+    </item>
     <item>
       <title>About</title>
       <link>https://gelosecurity.github.io/about/</link>

