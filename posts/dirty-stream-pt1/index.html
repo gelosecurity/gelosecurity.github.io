@@ -401,8 +401,8 @@ This class extends <code>ContentProvider</code>. The key method, <code>openFile<
 </span></span><span style="display:flex;"><span>        );
 </span></span><span style="display:flex;"><span>    }
 </span></span></code></pre></div><p>Once the <code>query</code> method was fixed to return the malicious file path through the <code>_display_name</code> column, the exploit successfully wrote <code>pwned.txt</code> to the target directory (<code>/data/data/com.mi.android.globalFileexplorer/shared_prefs/</code>).</p>
-<p><img src="../static/images/fanged-attempt.gif" alt="Fanged Attempt GIF">
-<img src="../static/images/console.gif" alt="Console GIF"></p>
+<p><img src="../static/images/fanged-attempt.gif" alt="Fanged Attempt GIF"></p>
+<p><img src="../static/images/console.gif" alt="Console GIF"></p>
 <h3 id="step-5-conclusion-and-next-steps">Step 5: Conclusion and Next Steps</h3>
 <p>This post has detailed a small journey from exploring a defanged PoC to refining it into a working exploit. The objective is not only to understand the vulnerability but also to inform developers and security professionals on how to better safeguard their applications.</p>
 <p>In future posts, we will target more sensitive files and achieve code execution!</p>
