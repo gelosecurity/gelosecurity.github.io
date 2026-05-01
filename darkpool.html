@@ -1,0 +1,276 @@
+# Dark Pool Alerts
+
+An autonomous ecosystem that tracks, filters, and routes institutional dark pool blocks and options sweeps into Discord.
+
+This repository evaluates live market data against technical (Minervini) and fundamental (SEPA) constraints to identify Stage 2 breakouts.
+
+---
+
+## 🎯 Trading Strategy & Philosophy
+
+This ecosystem automates a specific trading philosophy focused on finding **Confluence**.
+
+### The Core Pillars:
+1. **Institutional Dark Pools (The Footprints):** Institutions move the market via massive block trades executed off-exchange (Dark Pools). This system tracks trades upwards of **$50M to $5B+** to follow the "smart money."
+2. **Minervini Trend Template (The Technicals):** We only buy stocks in confirmed **Stage 2 Uptrends**. The Minervini 8/8 filter helps identify stocks that are technically strong, outperforming the S&P 500, and structurally ready for a breakout.
+3. **SEPA Growth Engine (The Catalyst):** **SEPA (Specific Entry Point Analysis)** verifies the fundamental catalysts driving the chart. A stock must have massive Q/Q Earnings growth (>20%), strong Top-Line Sales growth (>20%), and heavy mutual fund backing (>30%) in a top-performing market sector to qualify.
+4. **"Blue Skies" Absence of Supply (The Resistance):** Historical dark pool blocks act as overhead supply (resistance). We exclusively hunt for stocks trading **Above all historical Dark Pool Levels** (Blue Skies), meaning there is zero institutional resistance above the current price.
+
+**Confluence:** When an institution accumulates a massive block of a stock that is structurally robust (Minervini >= 7/8), possesses proven fundamental catalysts (SEPA >= 2/4), and is trading in Blue Skies (Above DP 1/1)—that is a **Confluence Strike**. *(Note: We use >= 7 and >= 2 to catch explosive turnaround plays like $NOK that have massive EPS growth but may lack top-line sales or deep institutional ownership yet).* 
+
+---
+
+## 🏗️ Architecture & Directory Structure
+
+The project has been architected into clean, segregated environments:
+
+```
+dark-pool-bot/
+├── core/                           # The algorithmic scoring engines
+│   ├── minervini.py                # 8/8 Technical Trend Template engine
+│   └── sepa.py                     # 4/4 Fundamental Growth engine
+├── data/                           # JSON state memory 
+│   ├── db.json                     # Persistent DB of the all-time largest and highest Dark Pool blocks per ticker
+│   └── daily_alerts.json           # Temporary memory to prevent Discord webhook spam
+├── discord_bots/                   # Isolated routing and alert bots
+│   ├── darkpool_intraday/          # Intraday Record Breaker (live_whales.py)
+│   ├── darkpool_levels/            # Intraday Whale Defense levels (level_striker.py)
+│   ├── darkpool_eod/               # End-of-Day Top 7 Market Cap blocks (eod_leaderboard.py)
+│   └── options_sweeps/             # End-of-Day Bullish Vol > OI Sweeps (options_leaderboard.py)
+├── extension/                      # Chrome Extension for PineScript generation (auto-adjusts for stock splits)
+└── .github/workflows/bots.yml      # CI/CD Cloud orchestrator
+```
+
+---
+
+## 🧠 The Scoring Engines
+
+Every single trade is evaluated through three separate algorithmic engines to define **Confluence**.
+
+### 1. Minervini Trend Template (8/8)
+Calculates the exact structural health of a stock chart. A stock must score at least **7/8** to pass standard filters.
+1. Stock Price > 150 & 200 SMA
+2. 150 SMA > 200 SMA
+3. 200 SMA is trending up for >1 month
+4. 50 SMA > 150 & 200 SMA
+5. Stock Price > 50 SMA
+6. Stock Price > 52-Week Low + 25%
+7. Stock Price is within 25% of 52-Week High
+8. **Relative Strength (RS) Rating > 70** *(Using exact weighted 3, 6, 9, 12-month PineScript algorithm).*
+
+### 2. SEPA Fundamental Growth Engine (4/4)
+Silently scrapes Finviz to verify the "Rocket Fuel" (catalyst). A stock must score at least **2/4** to meet Confluence. It extracts Raw EPS, Sales Growth, Institutional Ownership %, Short Float %, and the Next Earnings Date.
+1. **EPS Growth:** Q/Q Earnings Per Share >= 20%
+2. **Sales Growth:** Q/Q Top-Line Revenue >= 20%
+3. **Institutional Ownership:** Smart money backing >= 30%
+4. **Sector Momentum:** The stock currently belongs to one of the Top 4 performing market sectors (dynamically calculated live against SPDR ETFs).
+
+### 3. Above Dark Pool Resistance (1/1)
+A boolean constraint that strictly defines "Blue Skies" by checking the live TradingView price against the `data/db.json` database. 
+* It finds the **Ceiling Price** (the absolute highest price any >$2M institutional Dark Pool block was ever printed at for that ticker).
+* If Live Price > The Ceiling Price: Score is **1/1**.
+* This proves there is **Zero Institutional Supply Overhead**.
+
+---
+
+## 🚨 Webhook Routing Logic (The Alpha Filter)
+
+The bots utilize a multi-routing pipeline to organize alerts:
+
+* **The Record Breakers Webhook (Dark Gold):** When the `live_whales.py` bot detects an institutional print whose dollar volume shatters the 5-year All-Time High, it fires a "Record Breaker" alert. It does **not** need to be above all DPs to trigger.
+* **The "Blue Skies Confluence" Webhook (Discord Blue):** A dedicated webhook for high-confluence setups. When an intraday **Whale Level Strike** OR an **All-Time Record Breaker** hits the tape and the stock meets strict **Confluence** (`Minervini >= 7/8`, `SEPA >= 2/4`, `Above DP == 1/1`), it triggers a high-probability alert. The alert turns Discord Blue, is dynamically titled `☁️ BLUE SKIES - RECORD BREAKER` or `☁️ BLUE SKIES - WHALE STRIKE`, and is diverted exclusively to the Alpha Discord channel. 
+* **Standard Channels:** Normal Dark Pool sweeps and Options flow that pass minimum metrics route to their standard feeds.
+
+---
+
+## 📊 Visual UI Output
+All bots utilize heavily formatted, native Discord ANSI code blocks for dark-mode readability:
+
+```ansi
+Value   : $500.00M
+Price   : $155.00
+Previous: $350.00M
+Prev Px : $130.00
+... (or for Strikes) ...
+Gold DP : $144.71 (Heaviest Block)
+Ceiling : $150.00 (Highest Price)
+Live    : $155.00
+Strength: $479.7M (Printed: 1/30/2026)
+Inst Own: 45.94% | Short: 22.13% 🚨
+Growth  : EPS +96.65% | Sales +73.21%
+Earnings: May 20 AMC
+Rating  : Minervini 8/8 • SEPA 4/4 • Above DP 1/1
+```
+*(Notice the split between Gold DP and Ceiling to perfectly visually map the Above DP logic, and the Previous Px tracking on Record Breakers).*
+*(The `🚨` emoji dynamically triggers if Short Interest exceeds 15%, warning of a massive short-squeeze potential).*
+
+---
+
+## 🤖 The Bots
+
+### 1. Intraday Whales (`live_whales.py`)
+* Runs continuously intraday. 
+* Scans the tape for blocks >$50M. If the block shatters the all-time largest notional print recorded in `db.json`, it triggers a massive "ALL TIME RECORD BREAKER" alert and permanently updates the database. Will dynamically upgrade to `☁️ BLUE SKIES - RECORD BREAKER` if it meets Confluence.
+
+### 2. Whale Level Striker (`level_striker.py`)
+* Runs every 5 minutes intraday.
+* Scrapes the TradingView live tape and compares the live price of thousands of stocks to their historical Whale Levels. 
+* If a stock enters within ±1.0% of the institutional defense line, it triggers a Strike Alert. If it meets Confluence, it triggers the `☁️ BLUE SKIES - WHALE STRIKE` alert.
+
+### 3. EOD Dark Pool Leaderboard (`eod_leaderboard.py`)
+* Runs at market close.
+* Ranks the top 7 dark pool blocks of the day mathematically by their **Premium % of Total Market Cap**, exposing stealth accumulation in mid/small caps. Stacked as isolated Discord Embeds to prevent ReDos markdown failures.
+
+### 4. Options Bullish Sweeps (`options_leaderboard.py`)
+* Runs at market close.
+* Filters millions of options contracts strictly for:
+  * **Ask-Side Sweeps** (Aggressive buying taking market liquidity).
+  * **Volume > Open Interest** (Proving new institutional positions are opening, rather than old ones closing).
+  * Evaluates Days to Expiration (DTE) and Moneyness (ITM/OTM/ATM).
+
+---
+
+## 🚀 Execution & Deployment
+The entire ecosystem is orchestrated serverlessly in the cloud using **GitHub Actions** (`.github/workflows/bots.yml`). No local server is required. 
+
+* The Intraday bots run on a chron schedule while the market is open.
+* The EOD bots run once daily after the closing bell.
+* A programmatic `health_check.py` runs at 8:45 AM daily to ensure TradingView, Blackboxstocks, Finviz, and the GitHub CI/CD environment are fully online.
+# Dark Pool Alerts
+
+An autonomous ecosystem that tracks, filters, and routes institutional dark pool blocks and options sweeps into Discord.
+
+This repository evaluates live market data against technical (Minervini) and fundamental (SEPA) constraints to identify Stage 2 breakouts.
+
+---
+
+## 🎯 Trading Strategy & Philosophy
+
+This ecosystem automates a specific trading philosophy focused on finding **Confluence**.
+
+### The Core Pillars:
+1. **Institutional Dark Pools (The Footprints):** Institutions move the market via massive block trades executed off-exchange (Dark Pools). This system tracks trades upwards of **$50M to $5B+** to follow the "smart money."
+2. **Minervini Trend Template (The Technicals):** We only buy stocks in confirmed **Stage 2 Uptrends**. The Minervini 8/8 filter helps identify stocks that are technically strong, outperforming the S&P 500, and structurally ready for a breakout.
+3. **SEPA Growth Engine (The Catalyst):** **SEPA (Specific Entry Point Analysis)** verifies the fundamental catalysts driving the chart. A stock must have massive Q/Q Earnings growth (>20%), strong Top-Line Sales growth (>20%), and heavy mutual fund backing (>30%) in a top-performing market sector to qualify.
+4. **"Blue Skies" Absence of Supply (The Resistance):** Historical dark pool blocks act as overhead supply (resistance). We exclusively hunt for stocks trading **Above all historical Dark Pool Levels** (Blue Skies), meaning there is zero institutional resistance above the current price.
+
+**Confluence:** When an institution accumulates a massive block of a stock that is structurally robust (Minervini >= 7/8), possesses proven fundamental catalysts (SEPA >= 2/4), and is trading in Blue Skies (Above DP 1/1)—that is a **Confluence Strike**. *(Note: We use >= 7 and >= 2 to catch explosive turnaround plays like $NOK that have massive EPS growth but may lack top-line sales or deep institutional ownership yet).* 
+
+---
+
+## 🏗️ Architecture & Directory Structure
+
+The project has been architected into clean, segregated environments:
+
+```
+dark-pool-bot/
+├── core/                           # The algorithmic scoring engines
+│   ├── minervini.py                # 8/8 Technical Trend Template engine
+│   └── sepa.py                     # 4/4 Fundamental Growth engine
+├── data/                           # JSON state memory 
+│   ├── db.json                     # Persistent DB of the all-time largest and highest Dark Pool blocks per ticker
+│   └── daily_alerts.json           # Temporary memory to prevent Discord webhook spam
+├── discord_bots/                   # Isolated routing and alert bots
+│   ├── darkpool_intraday/          # Intraday Record Breaker (live_whales.py)
+│   ├── darkpool_levels/            # Intraday Whale Defense levels (level_striker.py)
+│   ├── darkpool_eod/               # End-of-Day Top 7 Market Cap blocks (eod_leaderboard.py)
+│   └── options_sweeps/             # End-of-Day Bullish Vol > OI Sweeps (options_leaderboard.py)
+├── extension/                      # Chrome Extension for PineScript generation (auto-adjusts for stock splits)
+└── .github/workflows/bots.yml      # CI/CD Cloud orchestrator
+```
+
+---
+
+## 🧠 The Scoring Engines
+
+Every single trade is evaluated through three separate algorithmic engines to define **Confluence**.
+
+### 1. Minervini Trend Template (8/8)
+Calculates the exact structural health of a stock chart. A stock must score at least **7/8** to pass standard filters.
+1. Stock Price > 150 & 200 SMA
+2. 150 SMA > 200 SMA
+3. 200 SMA is trending up for >1 month
+4. 50 SMA > 150 & 200 SMA
+5. Stock Price > 50 SMA
+6. Stock Price > 52-Week Low + 25%
+7. Stock Price is within 25% of 52-Week High
+8. **Relative Strength (RS) Rating > 70** *(Using exact weighted 3, 6, 9, 12-month PineScript algorithm).*
+
+### 2. SEPA Fundamental Growth Engine (4/4)
+Silently scrapes Finviz to verify the "Rocket Fuel" (catalyst). A stock must score at least **2/4** to meet Confluence. It extracts Raw EPS, Sales Growth, Institutional Ownership %, Short Float %, and the Next Earnings Date.
+1. **EPS Growth:** Q/Q Earnings Per Share >= 20%
+2. **Sales Growth:** Q/Q Top-Line Revenue >= 20%
+3. **Institutional Ownership:** Smart money backing >= 30%
+4. **Sector Momentum:** The stock currently belongs to one of the Top 4 performing market sectors (dynamically calculated live against SPDR ETFs).
+
+### 3. Above Dark Pool Resistance (1/1)
+A boolean constraint that strictly defines "Blue Skies" by checking the live TradingView price against the `data/db.json` database. 
+* It finds the **Ceiling Price** (the absolute highest price any >$2M institutional Dark Pool block was ever printed at for that ticker).
+* If Live Price > The Ceiling Price: Score is **1/1**.
+* This proves there is **Zero Institutional Supply Overhead**.
+
+---
+
+## 🚨 Webhook Routing Logic (The Alpha Filter)
+
+The bots utilize a multi-routing pipeline to organize alerts:
+
+* **The Record Breakers Webhook (Dark Gold):** When the `live_whales.py` bot detects an institutional print whose dollar volume shatters the 5-year All-Time High, it fires a "Record Breaker" alert. It does **not** need to be above all DPs to trigger.
+* **The "Blue Skies Confluence" Webhook (Discord Blue):** A dedicated webhook for high-confluence setups. When an intraday **Whale Level Strike** OR an **All-Time Record Breaker** hits the tape and the stock meets strict **Confluence** (`Minervini >= 7/8`, `SEPA >= 2/4`, `Above DP == 1/1`), it triggers a high-probability alert. The alert turns Discord Blue, is dynamically titled `☁️ BLUE SKIES - RECORD BREAKER` or `☁️ BLUE SKIES - WHALE STRIKE`, and is diverted exclusively to the Alpha Discord channel. 
+* **Standard Channels:** Normal Dark Pool sweeps and Options flow that pass minimum metrics route to their standard feeds.
+
+---
+
+## 📊 Visual UI Output
+All bots utilize heavily formatted, native Discord ANSI code blocks for dark-mode readability:
+
+```ansi
+Value   : $500.00M
+Price   : $155.00
+Previous: $350.00M
+Prev Px : $130.00
+... (or for Strikes) ...
+Gold DP : $144.71 (Heaviest Block)
+Ceiling : $150.00 (Highest Price)
+Live    : $155.00
+Strength: $479.7M (Printed: 1/30/2026)
+Inst Own: 45.94% | Short: 22.13% 🚨
+Growth  : EPS +96.65% | Sales +73.21%
+Earnings: May 20 AMC
+Rating  : Minervini 8/8 • SEPA 4/4 • Above DP 1/1
+```
+*(Notice the split between Gold DP and Ceiling to perfectly visually map the Above DP logic, and the Previous Px tracking on Record Breakers).*
+*(The `🚨` emoji dynamically triggers if Short Interest exceeds 15%, warning of a massive short-squeeze potential).*
+
+---
+
+## 🤖 The Bots
+
+### 1. Intraday Whales (`live_whales.py`)
+* Runs continuously intraday. 
+* Scans the tape for blocks >$50M. If the block shatters the all-time largest notional print recorded in `db.json`, it triggers a massive "ALL TIME RECORD BREAKER" alert and permanently updates the database. Will dynamically upgrade to `☁️ BLUE SKIES - RECORD BREAKER` if it meets Confluence.
+
+### 2. Whale Level Striker (`level_striker.py`)
+* Runs every 5 minutes intraday.
+* Scrapes the TradingView live tape and compares the live price of thousands of stocks to their historical Whale Levels. 
+* If a stock enters within ±1.0% of the institutional defense line, it triggers a Strike Alert. If it meets Confluence, it triggers the `☁️ BLUE SKIES - WHALE STRIKE` alert.
+
+### 3. EOD Dark Pool Leaderboard (`eod_leaderboard.py`)
+* Runs at market close.
+* Ranks the top 7 dark pool blocks of the day mathematically by their **Premium % of Total Market Cap**, exposing stealth accumulation in mid/small caps. Stacked as isolated Discord Embeds to prevent ReDos markdown failures.
+
+### 4. Options Bullish Sweeps (`options_leaderboard.py`)
+* Runs at market close.
+* Filters millions of options contracts strictly for:
+  * **Ask-Side Sweeps** (Aggressive buying taking market liquidity).
+  * **Volume > Open Interest** (Proving new institutional positions are opening, rather than old ones closing).
+  * Evaluates Days to Expiration (DTE) and Moneyness (ITM/OTM/ATM).
+
+---
+
+## 🚀 Execution & Deployment
+The entire ecosystem is orchestrated serverlessly in the cloud using **GitHub Actions** (`.github/workflows/bots.yml`). No local server is required. 
+
+* The Intraday bots run on a chron schedule while the market is open.
+* The EOD bots run once daily after the closing bell.
+* A programmatic `health_check.py` runs at 8:45 AM daily to ensure TradingView, Blackboxstocks, Finviz, and the GitHub CI/CD environment are fully online.
